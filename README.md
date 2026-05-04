@@ -102,6 +102,10 @@ This console implements the rules from the RAPP species root:
 - **Single-parent rule for variants** (Article XXXIV) — when cartridges spawn new twins (e.g., `SummonTwin`), `parent_rappid` always points to the actual code-ancestor.
 - **Never overwrite local data** — installer/expansion-pack scripts refuse to clobber existing files; cartridges write to canonical paths only.
 
+## Specification
+
+The full contract — what cartridges can rely on forever, what counts as a valid cartridge, every schema (peer registry, egg, manifest, lineage) — is in [`SPEC.md`](./SPEC.md). That document is the locked promise: cartridges authored against `rappterbox-console-spec/1.0` work on every rappterbox install today and forever.
+
 ## Related repos
 
 - [`kody-w/RAPP`](https://github.com/kody-w/RAPP) — the species root. The constitutional document. Where the kernel ultimately comes from.
