@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>rappterbox — console</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  /* ──────────────────────────────────────────────────────────────────
+     Original Xbox 360 launch-dashboard "blades" aesthetic (Nov 2005).
+     Silver-blue chrome, horizontal blade tabs, vertical list below,
+     soft glows, Segoe-system feel. No NXE, no Avatar Marketplace.
+  ────────────────────────────────────────────────────────────────────── */
+  :root {
+    --bg-grad-top:    #0c1a2e;
+    --bg-grad-bottom: #04080f;
+    --chrome-light:   #c9d6e2;
+    --chrome:         #8da9c4;
+    --chrome-dark:    #2f4660;
+    --text:           #eaf2fb;
+    --muted:          #93a5bb;
+    --accent:         #5fc4ff;       /* signature 360 blue */
+    --accent-glow:    rgba(95, 196, 255, 0.55);
+    --accent-soft:    rgba(95, 196, 255, 0.12);
+    --green:          #8fd960;       /* Xbox guide green */
+    --green-glow:     rgba(143, 217, 96, 0.45);
+    --red:            #ff6b6b;
+    --gold:           #ffc857;
+    --panel:          rgba(255,255,255,0.04);
+    --panel-hi:       rgba(95, 196, 255, 0.08);
+    --border:         rgba(141, 169, 196, 0.18);
+    --border-hi:      rgba(95, 196, 255, 0.45);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: linear-gradient(180deg, var(--bg-grad-top) 0%, var(--bg-grad-bottom) 100%) fixed;
+    color: var(--text);
+    font: 14px/1.4 "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  /* Soft particle / glow field — atmosphere around the blades */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(circle 800px at 50% -200px, var(--accent-soft), transparent 70%),
+      radial-gradient(circle 600px at 100% 110%, rgba(143, 217, 96, 0.06), transparent 70%);
+    pointer-events: none; z-index: 0;
+  }
+  /* Subtle grain — the launch UI had a slight film over everything */
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: radial-gradient(rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 3px 3px;
+    pointer-events: none; z-index: 0;
+    opacity: 0.5;
+  }
+  code, .mono { font-family: ui-monospace, "Consolas", Menlo, monospace; }
+
+  /* ── Top status row ─────────────────────────────────────────────── */
+  header.statusbar {
+    position: relative; z-index: 5;
+    display: flex; align-items: center; gap: 18px;
+    padding: 16px 36px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, rgba(0,0,0,0.4), transparent);
+  }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .brand .ring {
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 32% 30%, #b6e5ff 0%, var(--accent) 30%, #1d6da8 70%, #0a2842 100%);
+    box-shadow:
+      0 0 18px var(--accent-glow),
+      inset 0 0 10px rgba(255,255,255,0.25),
+      inset 0 -3px 6px rgba(0,0,0,0.3);
+    position: relative;
+  }
+  .brand .ring::before, .brand .ring::after {
+    content: ''; position: absolute; inset: 6px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.4);
+  }
+  .brand .ring::after { inset: 12px; opacity: 0.5; }
+  .brand h1 {
+    margin: 0; font-size: 16px; font-weight: 700;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--chrome-light);
+    text-shadow: 0 0 12px var(--accent-soft);
+  }
+  .brand h1 .sub {
+    display: block; margin-top: 2px;
+    font-size: 10px; font-weight: 400;
+    letter-spacing: 0.12em; color: var(--muted);
+  }
+  .clock {
+    margin-left: auto;
+    font-family: ui-monospace, monospace;
+    font-size: 12px; color: var(--muted);
+    letter-spacing: 0.08em;
+  }
+  .status-pill {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: rgba(0,0,0,0.35);
+    border: 1px solid var(--border);
+    font-size: 11px; font-family: ui-monospace, monospace;
+    letter-spacing: 0.05em; text-transform: uppercase;
+  }
+  .status-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--chrome-dark); }
+  .status-pill.live .dot { background: var(--green); box-shadow: 0 0 10px var(--green-glow); }
+  .status-pill.error .dot { background: var(--red); }
+
+  /* ── Blades (horizontal tabs) ───────────────────────────────────── */
+  nav.blades {
+    position: relative; z-index: 4;
+    display: flex; align-items: stretch;
+    padding: 32px 36px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  nav.blades .blade {
+    background: transparent;
+    border: 0;
+    padding: 14px 28px 18px;
+    color: var(--muted);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    position: relative;
+    transition: color 0.15s ease;
+  }
+  nav.blades .blade:hover { color: var(--chrome-light); }
+  nav.blades .blade.is-active {
+    color: var(--accent);
+    text-shadow: 0 0 16px var(--accent-glow);
+  }
+  nav.blades .blade.is-active::after {
+    content: '';
+    position: absolute; left: 50%; bottom: -1px;
+    transform: translateX(-50%);
+    width: 0; height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 8px solid var(--accent);
+    filter: drop-shadow(0 0 8px var(--accent-glow));
+  }
+  nav.blades .blade.is-active::before {
+    content: '';
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    box-shadow: 0 0 16px var(--accent-glow);
+  }
+
+  /* ── Blade content area ─────────────────────────────────────────── */
+  main.bladebody {
+    position: relative; z-index: 3;
+    padding: 32px 36px 80px;
+    max-width: 1080px;
+    margin: 0 auto;
+  }
+  .blade-panel { display: none; animation: slidefade 0.32s ease both; }
+  .blade-panel.is-active { display: block; }
+  @keyframes slidefade {
+    from { opacity: 0; transform: translateX(24px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  .panel-head {
+    margin-bottom: 14px;
+    color: var(--muted);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 10px;
+  }
+  .panel-head .count {
+    margin-left: 8px; color: var(--chrome);
+    font-family: ui-monospace, monospace;
+  }
+
+  /* ── List of cartridges (blade-style horizontal rows) ───────────── */
+  ul.list { list-style: none; margin: 0; padding: 0; }
+  li.row {
+    display: grid;
+    grid-template-columns: 56px 1fr auto;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 16px;
+    margin: 4px 0;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease, transform 0.1s ease;
+  }
+  li.row:hover, li.row:focus {
+    background: var(--panel-hi);
+    border-color: var(--border-hi);
+    outline: none;
+    transform: translateX(4px);
+    box-shadow: -3px 0 0 var(--accent), inset 0 0 24px var(--accent-soft);
+  }
+  li.row .icon {
+    width: 56px; height: 56px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, rgba(95,196,255,0.12), rgba(95,196,255,0.02));
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+  }
+  li.row .icon svg { width: 56px; height: 56px; }
+  li.row .meta { min-width: 0; }
+  li.row .meta h4 {
+    margin: 0 0 2px;
+    font-size: 15px; font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+  li.row .meta .pub {
+    font-size: 10px; color: var(--muted);
+    font-family: ui-monospace, monospace;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  li.row .meta .desc {
+    margin-top: 4px; color: var(--muted); font-size: 12px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  li.row:hover .meta .desc { white-space: normal; }
+  li.row .play-arrow {
+    color: var(--accent);
+    font-size: 14px;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+    opacity: 0.4;
+    transition: opacity 0.12s, transform 0.12s;
+    text-transform: uppercase;
+  }
+  li.row:hover .play-arrow {
+    opacity: 1;
+    transform: translateX(4px);
+  }
+
+  .empty {
+    padding: 48px 16px;
+    text-align: center;
+    color: var(--muted);
+    font-style: italic;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+  }
+  .err {
+    padding: 16px 18px;
+    border: 1px solid rgba(255, 107, 107, 0.3);
+    background: rgba(255, 107, 107, 0.06);
+    color: var(--red);
+    border-radius: 6px;
+    font-family: ui-monospace, monospace; font-size: 12px;
+  }
+
+  /* ── System blade ───────────────────────────────────────────────── */
+  .system-grid {
+    display: grid; gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+  .system-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 18px;
+  }
+  .system-card h5 {
+    margin: 0 0 10px;
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--accent);
+  }
+  .system-card .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12px; }
+  .system-card .kv dt { color: var(--muted); font-family: ui-monospace, monospace; }
+  .system-card .kv dd { margin: 0; font-family: ui-monospace, monospace; word-break: break-all; }
+
+  /* ── Marketplace blade ──────────────────────────────────────────── */
+  .market-cta {
+    background: linear-gradient(135deg, rgba(95,196,255,0.12), rgba(143,217,96,0.06));
+    border: 1px solid var(--border-hi);
+    border-radius: 8px;
+    padding: 24px;
+    text-align: center;
+  }
+  .market-cta h4 { margin: 0 0 8px; font-size: 18px; font-weight: 700; letter-spacing: 0.04em; }
+  .market-cta p { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
+  a.btn {
+    display: inline-block;
+    padding: 10px 20px;
+    background: linear-gradient(180deg, rgba(95,196,255,0.3), rgba(95,196,255,0.12));
+    color: var(--accent);
+    border: 1px solid var(--border-hi);
+    border-radius: 6px;
+    text-decoration: none;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-size: 12px;
+    transition: background 0.12s, color 0.12s;
+  }
+  a.btn:hover { background: linear-gradient(180deg, rgba(95,196,255,0.5), rgba(95,196,255,0.2)); color: white; }
+
+  /* ── Play modal: chat with the cartridge ───────────────────────── */
+  dialog#play {
+    width: min(720px, 92vw);
+    max-height: 85vh;
+    background: linear-gradient(180deg, rgba(20, 36, 58, 0.96), rgba(8, 14, 24, 0.98));
+    color: var(--text);
+    border: 1px solid var(--border-hi);
+    border-radius: 10px;
+    padding: 0;
+    overflow: hidden;
+    box-shadow:
+      0 30px 80px rgba(0,0,0,0.85),
+      0 0 50px var(--accent-glow);
+  }
+  dialog#play::backdrop {
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0.85), rgba(0,0,0,0.97));
+    backdrop-filter: blur(6px);
+  }
+  dialog#play .head {
+    display: flex; gap: 18px;
+    padding: 22px 24px 18px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, var(--accent-soft), transparent);
+    position: relative;
+  }
+  dialog#play .head .icon {
+    flex-shrink: 0; width: 72px; height: 72px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, rgba(95,196,255,0.16), rgba(95,196,255,0.04));
+    border: 1px solid var(--border-hi);
+    display: flex; align-items: center; justify-content: center;
+  }
+  dialog#play .head .icon svg { width: 64px; height: 64px; }
+  dialog#play .head .meta { flex: 1; min-width: 0; }
+  dialog#play .head h3 { margin: 0 0 4px; font-size: 18px; font-weight: 700; letter-spacing: 0.04em; }
+  dialog#play .head .pub {
+    font-size: 11px; color: var(--muted);
+    font-family: ui-monospace, monospace;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 6px;
+  }
+  dialog#play .head .desc { color: var(--muted); font-size: 13px; line-height: 1.5; }
+  dialog#play .close {
+    position: absolute; top: 12px; right: 12px;
+    background: transparent; color: var(--muted);
+    width: 32px; height: 32px;
+    border: 1px solid transparent; border-radius: 50%;
+    cursor: pointer; font-size: 16px;
+    transition: color 0.12s, border-color 0.12s;
+  }
+  dialog#play .close:hover { color: var(--text); border-color: var(--border-hi); }
+
+  .chat { padding: 16px 24px; max-height: 50vh; overflow-y: auto; }
+  .turn { display: flex; gap: 12px; margin-bottom: 14px; }
+  .turn .who {
+    font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted);
+    width: 64px; flex-shrink: 0; padding-top: 6px;
+  }
+  .turn .body {
+    flex: 1;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 13px; line-height: 1.55;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .turn.user .who { color: var(--accent); }
+  .turn.user .body { background: var(--accent-soft); border-color: var(--border-hi); }
+  .turn.tool .who { color: var(--green); }
+  .turn.tool .body {
+    background: rgba(143,217,96,0.06);
+    border-color: rgba(143,217,96,0.25);
+    font-family: ui-monospace, monospace; font-size: 12px;
+  }
+
+  .composer {
+    border-top: 1px solid var(--border);
+    padding: 16px 24px;
+    background: rgba(0,0,0,0.4);
+    display: flex; gap: 12px; align-items: flex-end;
+  }
+  .composer textarea {
+    flex: 1;
+    background: rgba(0,0,0,0.45);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font: inherit; font-size: 13px;
+    resize: none; min-height: 44px; max-height: 120px;
+  }
+  .composer textarea:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+  .composer button.go {
+    flex-shrink: 0;
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    border: 2px solid var(--green);
+    background:
+      radial-gradient(circle at 35% 35%, #c4ff96 0%, var(--green) 35%, #4a8a23 75%, #1c3608 100%);
+    color: white;
+    font-size: 16px; font-weight: 800;
+    cursor: pointer;
+    box-shadow:
+      0 0 18px var(--green-glow),
+      inset 0 0 8px rgba(255,255,255,0.3),
+      inset 0 -3px 6px rgba(0,0,0,0.45);
+    transition: transform 0.1s;
+  }
+  .composer button.go:hover:not(:disabled) { transform: scale(1.05); }
+  .composer button.go:active:not(:disabled) { transform: scale(0.95); }
+  .composer button.go:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .hint {
+    color: var(--muted); font-size: 11px;
+    padding: 8px 24px 12px;
+    font-family: ui-monospace, monospace;
+  }
+
+  /* ── Mobile niceties ────────────────────────────────────────────── */
+  @media (max-width: 640px) {
+    header.statusbar { padding: 12px 16px; gap: 10px; flex-wrap: wrap; }
+    .clock { display: none; }
+    nav.blades { padding: 16px 16px 0; overflow-x: auto; }
+    nav.blades .blade { padding: 10px 14px 14px; font-size: 12px; }
+    main.bladebody { padding: 18px 16px 60px; }
+    li.row { grid-template-columns: 44px 1fr auto; padding: 10px 12px; }
+    li.row .icon { width: 44px; height: 44px; }
+    li.row .icon svg { width: 44px; height: 44px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="statusbar">
+  <div class="brand">
+    <div class="ring" aria-hidden="true"></div>
+    <h1>RAPPTERBOX
+      <span class="sub" id="ver">CONSOLE · LAUNCH DASHBOARD</span>
+    </h1>
+  </div>
+  <div class="clock" id="clock">--:--</div>
+  <div class="status-pill" id="status">
+    <span class="dot"></span>
+    <span id="status-text">CONNECTING…</span>
+  </div>
+</header>
+
+<nav class="blades" id="blades">
+  <button class="blade is-active" data-blade="cartridges">My Cartridges</button>
+  <button class="blade" data-blade="estate">Twin Estate</button>
+  <button class="blade" data-blade="marketplace">Marketplace</button>
+  <button class="blade" data-blade="system">System</button>
+</nav>
+
+<main class="bladebody">
+
+  <!-- ── My Cartridges blade ─────────────────────────────────────── -->
+  <section class="blade-panel is-active" id="panel-cartridges">
+    <div class="panel-head">Installed cartridges<span class="count" id="cart-count">…</span></div>
+    <ul class="list" id="cart-list">
+      <li class="empty">Loading cartridges from the brainstem…</li>
+    </ul>
+  </section>
+
+  <!-- ── Twin Estate blade ───────────────────────────────────────── -->
+  <section class="blade-panel" id="panel-estate">
+    <div class="panel-head">Twins on this device<span class="count" id="estate-count">…</span></div>
+    <ul class="list" id="estate-list">
+      <li class="empty">Twins will appear here once you summon one. In chat: <em>"Make me a personal twin."</em></li>
+    </ul>
+  </section>
+
+  <!-- ── Marketplace blade ───────────────────────────────────────── -->
+  <section class="blade-panel" id="panel-marketplace">
+    <div class="panel-head">Public catalog · @kody-w/RAR</div>
+    <div class="market-cta">
+      <h4>Browse the RAR catalog</h4>
+      <p>The public Pokédex of cartridges. 280+ agents from 10+ publishers.<br>Drop one into <code>~/.brainstem/agents/</code> and reboot the brainstem.</p>
+      <a class="btn" href="https://kody-w.github.io/RAR/" target="_blank" rel="noopener">Open RAR ↗</a>
+    </div>
+    <p style="color: var(--muted); font-size: 12px; margin-top: 18px;">Quick install of any cartridge:</p>
+    <pre style="background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; font-size: 12px; color: var(--chrome);">curl -fsSL https://raw.githubusercontent.com/kody-w/RAR/main/agents/@kody-w/summon_twin_agent.py \
+     -o ~/.brainstem/agents/summon_twin_agent.py
+bash ~/.brainstem/start.sh</pre>
+  </section>
+
+  <!-- ── System blade ────────────────────────────────────────────── -->
+  <section class="blade-panel" id="panel-system">
+    <div class="panel-head">System</div>
+    <div class="system-grid">
+      <div class="system-card">
+        <h5>Brainstem</h5>
+        <dl class="kv">
+          <dt>Status</dt><dd id="sys-status">…</dd>
+          <dt>Version</dt><dd id="sys-version">…</dd>
+          <dt>Endpoint</dt><dd id="sys-endpoint">…</dd>
+        </dl>
+      </div>
+      <div class="system-card">
+        <h5>Paths</h5>
+        <dl class="kv">
+          <dt>Install</dt><dd>~/.brainstem</dd>
+          <dt>Cartridges</dt><dd>~/.brainstem/agents/</dd>
+          <dt>Twins</dt><dd>~/.rapp/twins/</dd>
+          <dt>Eggs</dt><dd>~/.rapp/eggs/</dd>
+        </dl>
+      </div>
+      <div class="system-card">
+        <h5>About</h5>
+        <p style="color: var(--muted); font-size: 12px; line-height: 1.55; margin: 0;">
+          Rappterbox is the local-first console for digital organisms.
+          The brainstem is the kernel; cartridges (<code>*_agent.py</code>) plug in.
+          See <a href="https://github.com/kody-w/rappterbox/blob/main/SPEC.md" style="color: var(--accent);">SPEC.md</a>.
+        </p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<dialog id="play">
+  <button class="close" aria-label="close" id="play-close">✕</button>
+  <div class="head">
+    <div class="icon" id="play-art"></div>
+    <div class="meta">
+      <h3 id="play-title">…</h3>
+      <div class="pub" id="play-pub">…</div>
+      <div class="desc" id="play-desc">…</div>
+    </div>
+  </div>
+  <div class="chat" id="play-chat"></div>
+  <div class="composer">
+    <textarea id="play-input" rows="2" placeholder="Tell the brainstem what you want this cartridge to do…"></textarea>
+    <button class="go" id="play-send" aria-label="play">A</button>
+  </div>
+  <div class="hint">⏎ to send · shift+⏎ for newline · esc to close</div>
+</dialog>
+
+<script>
+const BRAINSTEM_BASE = (location.protocol === "file:") ? "http://127.0.0.1:7071" : "";
+const $ = (id) => document.getElementById(id);
+
+// ── Deterministic 6×6 sprite from a string ─────────────────────────────
+function spriteSVG(seed) {
+  let h = 0; for (let i = 0; i < seed.length; i++) h = ((h << 5) - h + seed.charCodeAt(i)) | 0;
+  const cells = [];
+  for (let y = 0; y < 6; y++) {
+    for (let x = 0; x < 3; x++) {
+      const bit = (h >> ((y * 3 + x) % 28)) & 1;
+      cells.push({x, y, on: bit});
+      cells.push({x: 5 - x, y, on: bit});
+    }
+  }
+  const hue = ((h >>> 16) & 0xff);
+  const fg = `hsl(${hue}, 65%, 65%)`;
+  const bg = `hsl(${hue}, 35%, 12%)`;
+  const rects = cells.filter(c => c.on)
+    .map(c => `<rect x="${c.x * 16}" y="${c.y * 16}" width="16" height="16" fill="${fg}"/>`)
+    .join("");
+  return `<svg viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg"><rect width="96" height="96" rx="6" fill="${bg}"/>${rects}</svg>`;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+// ── Friendly metadata ─────────────────────────────────────────────────
+function friendlyName(agentName, filename) {
+  if (agentName) return agentName;
+  if (!filename) return "Cartridge";
+  return filename.replace(/_agent\.py$/, "").split("_").map(s => s[0].toUpperCase() + s.slice(1)).join(" ");
+}
+const KNOWN_DESCRIPTIONS = {
+  "ManageMemory": "Save typed memories that survive across conversations.",
+  "ContextMemory": "Recall what you've told the brainstem before.",
+  "HackerNews": "Top stories from Hacker News, no API key required.",
+  "LearnNew": "Generate a brand-new agent from a description.",
+  "SummonTwin": "Create a fresh digital twin organism on this device.",
+  "HatchEgg": "Hatch a .egg cartridge into a fully-viable local twin.",
+  "Hello World": "Friendly greeting agent that demonstrates the basics.",
+};
+function descriptionFor(agentName) {
+  return KNOWN_DESCRIPTIONS[agentName] || "Drop into chat. The model will use this when relevant.";
+}
+
+// ── State ──────────────────────────────────────────────────────────────
+const state = {
+  cartridges: [],
+  conversations: {},
+  brainstem: { status: "unknown", version: null },
+};
+
+// ── Blade switching ────────────────────────────────────────────────────
+$("blades").addEventListener("click", (e) => {
+  const b = e.target.closest(".blade");
+  if (!b) return;
+  document.querySelectorAll(".blade").forEach(x => x.classList.remove("is-active"));
+  document.querySelectorAll(".blade-panel").forEach(x => x.classList.remove("is-active"));
+  b.classList.add("is-active");
+  const panel = $("panel-" + b.dataset.blade);
+  if (panel) panel.classList.add("is-active");
+  if (b.dataset.blade === "estate") loadEstate();
+});
+
+// ── Clock ──────────────────────────────────────────────────────────────
+function updateClock() {
+  const d = new Date();
+  const t = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  $("clock").textContent = t;
+}
+setInterval(updateClock, 30000);
+updateClock();
+
+// ── Brainstem health ──────────────────────────────────────────────────
+async function pollHealth() {
+  try {
+    const r = await fetch(`${BRAINSTEM_BASE}/health`);
+    if (!r.ok) throw new Error(`status ${r.status}`);
+    const data = await r.json();
+    state.brainstem = { status: "online", version: data.version || "?" };
+    $("status").classList.remove("error"); $("status").classList.add("live");
+    $("status-text").textContent = "BRAINSTEM ONLINE · v" + state.brainstem.version;
+    $("ver").textContent = "CONSOLE · v" + state.brainstem.version;
+    $("sys-status").textContent = "online";
+    $("sys-version").textContent = state.brainstem.version;
+    $("sys-endpoint").textContent = (BRAINSTEM_BASE || location.origin) + "/";
+  } catch (e) {
+    state.brainstem = { status: "offline", version: null };
+    $("status").classList.remove("live"); $("status").classList.add("error");
+    $("status-text").textContent = "BRAINSTEM OFFLINE";
+    $("sys-status").textContent = "offline — bash ~/.brainstem/start.sh";
+    $("sys-version").textContent = "—";
+    $("sys-endpoint").textContent = (BRAINSTEM_BASE || location.origin) + "/";
+  }
+}
+
+// ── Cartridges blade ──────────────────────────────────────────────────
+async function loadCartridges() {
+  try {
+    const r = await fetch(`${BRAINSTEM_BASE}/agents`);
+    if (!r.ok) throw new Error(`status ${r.status}`);
+    const data = await r.json();
+    const out = [];
+    for (const f of (data.files || [])) {
+      for (const agentName of (f.agents || [])) {
+        out.push({
+          name: agentName,
+          filename: f.filename,
+          display: friendlyName(agentName, f.filename),
+          description: descriptionFor(agentName),
+          publisher: f.filename.replace(/_agent\.py$/, "").replace(/_/g, "-"),
+        });
+      }
+    }
+    state.cartridges = out.sort((a, b) => a.display.localeCompare(b.display));
+    renderCartridges();
+  } catch (e) {
+    $("cart-list").innerHTML = `<li class="err">Could not reach <code>${BRAINSTEM_BASE || "(same-origin)"}/agents</code>. Boot it: <code>bash ~/.brainstem/start.sh</code></li>`;
+    $("cart-count").textContent = "—";
+  }
+}
+function renderCartridges() {
+  const list = $("cart-list");
+  $("cart-count").textContent = "· " + state.cartridges.length;
+  if (state.cartridges.length === 0) {
+    list.innerHTML = '<li class="empty">No cartridges installed. Drop a *_agent.py into ~/.brainstem/agents/ and reboot the brainstem.</li>';
+    return;
+  }
+  list.innerHTML = state.cartridges.map(c => `
+    <li class="row" tabindex="0" data-name="${escapeHtml(c.name)}">
+      <div class="icon">${spriteSVG(c.name)}</div>
+      <div class="meta">
+        <h4>${escapeHtml(c.display)}</h4>
+        <div class="pub">${escapeHtml(c.publisher)}</div>
+        <div class="desc">${escapeHtml(c.description)}</div>
+      </div>
+      <div class="play-arrow">PLAY ▶</div>
+    </li>
+  `).join("");
+  list.querySelectorAll(".row").forEach(row => {
+    row.addEventListener("click", () => openPlay(row.dataset.name));
+    row.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPlay(row.dataset.name); }
+    });
+  });
+}
+
+// ── Twin Estate blade ─────────────────────────────────────────────────
+async function loadEstate() {
+  try {
+    const r = await fetch(`${BRAINSTEM_BASE}/api/estate/twins`);
+    if (!r.ok) throw new Error(`status ${r.status}`);
+    const data = await r.json();
+    const twins = data.twins || [];
+    $("estate-count").textContent = "· " + twins.length;
+    if (twins.length === 0) {
+      $("estate-list").innerHTML = '<li class="empty">No twins yet. In chat: <em>"Make me a personal twin"</em> — the SummonTwin cartridge will create one.</li>';
+      return;
+    }
+    $("estate-list").innerHTML = twins.map(t => `
+      <li class="row" tabindex="0">
+        <div class="icon">${spriteSVG(t.rappid_uuid)}</div>
+        <div class="meta">
+          <h4>${escapeHtml(t.name || t.rappid_uuid.slice(0, 8))}</h4>
+          <div class="pub">${escapeHtml(t.rappid_uuid)}</div>
+          <div class="desc">${(t.incarnation_count || 0)} incarnation${(t.incarnation_count === 1) ? '' : 's'}${t.parent_repo ? ' · parent: ' + escapeHtml(t.parent_repo) : ''}</div>
+        </div>
+        <div class="play-arrow">▶</div>
+      </li>
+    `).join("");
+  } catch (e) {
+    $("estate-list").innerHTML = '<li class="empty">Twin estate API not available on this brainstem (the estate body_function ships in rappterbox; older brainstems may not have it). Twins still work — they just don\'t list here.</li>';
+    $("estate-count").textContent = "—";
+  }
+}
+
+// ── Play modal ─────────────────────────────────────────────────────────
+let activeCartridge = null;
+
+function openPlay(name) {
+  const c = state.cartridges.find(x => x.name === name);
+  if (!c) return;
+  activeCartridge = c;
+  $("play-title").textContent = c.display;
+  $("play-pub").textContent = c.publisher;
+  $("play-desc").textContent = c.description;
+  $("play-art").innerHTML = spriteSVG(c.name);
+
+  const turns = state.conversations[name] || [];
+  $("play-chat").innerHTML = turns.length === 0
+    ? `<div style="color: var(--muted); font-size: 13px;">Tell the brainstem what you'd like to do — it'll route to <strong style="color: var(--text)">${escapeHtml(c.display)}</strong> when relevant.</div>`
+    : turns.map(t => `<div class="turn ${t.role}"><div class="who">${t.role.toUpperCase()}</div><div class="body">${escapeHtml(t.text)}</div></div>`).join("");
+
+  $("play-input").value = "";
+  $("play").showModal();
+  setTimeout(() => $("play-input").focus(), 50);
+}
+$("play-close").onclick = () => $("play").close();
+$("play").addEventListener("close", () => { activeCartridge = null; });
+
+$("play-input").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTurn(); }
+});
+$("play-send").onclick = sendTurn;
+
+async function sendTurn() {
+  const text = $("play-input").value.trim();
+  if (!text || !activeCartridge) return;
+  const name = activeCartridge.name;
+  const turns = state.conversations[name] || (state.conversations[name] = []);
+  turns.push({ role: "user", text });
+  $("play-input").value = "";
+  $("play-input").disabled = true; $("play-send").disabled = true;
+
+  appendTurn("user", text);
+  const thinking = appendTurn("tool", "…thinking");
+
+  try {
+    const userInput = `Use the ${activeCartridge.name} tool to: ${text}`;
+    const r = await fetch(`${BRAINSTEM_BASE}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_input: userInput,
+        conversation_history: turns.slice(0, -1).map(t => ({
+          role: t.role === "user" ? "user" : "assistant",
+          content: t.text,
+        })),
+      }),
+    });
+    if (!r.ok) throw new Error("status " + r.status);
+    const data = await r.json();
+    const reply = data.response || data.message || JSON.stringify(data, null, 2);
+    thinking.querySelector(".body").textContent = reply;
+    turns.push({ role: "tool", text: reply });
+  } catch (e) {
+    thinking.querySelector(".body").textContent = "Error: " + e.message;
+    turns.push({ role: "tool", text: "Error: " + e.message });
+  } finally {
+    $("play-input").disabled = false; $("play-send").disabled = false;
+    $("play-input").focus();
+  }
+}
+function appendTurn(role, text) {
+  const el = document.createElement("div");
+  el.className = "turn " + role;
+  el.innerHTML = `<div class="who">${role.toUpperCase()}</div><div class="body">${escapeHtml(text)}</div>`;
+  $("play-chat").appendChild(el);
+  $("play-chat").scrollTop = $("play-chat").scrollHeight;
+  return el;
+}
+
+// ── Boot ───────────────────────────────────────────────────────────────
+pollHealth();
+loadCartridges();
+setInterval(pollHealth, 10000);
+</script>
+</body>
+</html>

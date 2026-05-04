@@ -1,9 +1,10 @@
 #!/bin/bash
 # install.sh — rappterbox console installer.
 #
-# Installs the brainstem kernel + the bundled cartridges ("Wii Sports")
-# at ~/.brainstem/. After install, the console is bootable with
-# `bash ~/.brainstem/start.sh` — chat surface at http://localhost:7071.
+# rappterbox = the canonical rapp-installer brainstem + bundled cartridges
+# + expansion packs. The brainstem itself comes from the static-ancestor
+# rapp-installer (immutable, never changes). rappterbox adds the
+# cartridge layer on top.
 #
 # Usage:
 #   curl -fsSL https://kody-w.github.io/rappterbox/installer/install.sh | bash
@@ -13,11 +14,13 @@
 
 set -e
 
-REPO_URL="https://github.com/kody-w/rappterbox.git"
-INSTALL_DIR="$HOME/.brainstem"
-WITH_PACKS=()
+RAPP_INSTALLER_URL="https://kody-w.github.io/rapp-installer/install.sh"
+RAPPTERBOX_REPO="https://github.com/kody-w/rappterbox.git"
+RAPPTERBOX_DIR="${RAPPTERBOX_DIR:-$HOME/.rappterbox}"
+BRAINSTEM_DIR="$HOME/.brainstem"
 
-# Parse args: --with <pack-name>
+# Parse args: --with <pack-name>  (collect, install after layering)
+WITH_PACKS=()
 while [ $# -gt 0 ]; do
     case "$1" in
         --with)
@@ -32,60 +35,102 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-echo "[rappterbox] console install"
-echo "  source: $REPO_URL"
-echo "  target: $INSTALL_DIR"
+echo "[rappterbox] ─────────────────────────────────────────────────"
+echo "[rappterbox] Step 1 / 2: install the brainstem via the static-"
+echo "[rappterbox]            ancestor rapp-installer."
+echo "[rappterbox] ─────────────────────────────────────────────────"
+curl -fsSL "$RAPP_INSTALLER_URL" | bash
 
-# Clone or update
-if [ -d "$INSTALL_DIR/.git" ]; then
-    echo "[rappterbox] $INSTALL_DIR already a git repo — pulling latest"
-    git -C "$INSTALL_DIR" pull --ff-only
+echo ""
+echo "[rappterbox] ─────────────────────────────────────────────────"
+echo "[rappterbox] Step 2 / 2: layer rappterbox cartridges + expansion"
+echo "[rappterbox]            packs onto the brainstem."
+echo "[rappterbox] ─────────────────────────────────────────────────"
+
+# Sync rappterbox repo (cached at ~/.rappterbox/ between install runs)
+if [ -d "$RAPPTERBOX_DIR/.git" ]; then
+    echo "[rappterbox] updating $RAPPTERBOX_DIR …"
+    git -C "$RAPPTERBOX_DIR" pull --ff-only --quiet
 else
-    if [ -d "$INSTALL_DIR" ]; then
-        echo "[rappterbox] $INSTALL_DIR exists but is not a git repo —"
-        echo "          backing up to $INSTALL_DIR.bak.$(date +%s) before reinstall."
-        mv "$INSTALL_DIR" "$INSTALL_DIR.bak.$(date +%s)"
+    if [ -d "$RAPPTERBOX_DIR" ]; then
+        mv "$RAPPTERBOX_DIR" "$RAPPTERBOX_DIR.bak.$(date +%s)"
     fi
-    git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
+    echo "[rappterbox] cloning $RAPPTERBOX_REPO → $RAPPTERBOX_DIR"
+    git clone --depth 1 --quiet "$RAPPTERBOX_REPO" "$RAPPTERBOX_DIR"
 fi
 
-chmod +x "$INSTALL_DIR/start.sh" 2>/dev/null || true
-chmod +x "$INSTALL_DIR/installer/install.sh" 2>/dev/null || true
-chmod +x "$INSTALL_DIR/installer/install-expansion-pack.sh" 2>/dev/null || true
+# Layer 1: bundled "Wii Sports" cartridges (in case rapp-installer ships
+# without them, or with older versions). Never overwrites local data —
+# refuses if a target file exists with different content.
+mkdir -p "$BRAINSTEM_DIR/agents"
+new_count=0
+skipped_count=0
+for f in "$RAPPTERBOX_DIR/agents/"*_agent.py; do
+    [ -f "$f" ] || continue
+    name="$(basename "$f")"
+    target="$BRAINSTEM_DIR/agents/$name"
+    if [ -f "$target" ]; then
+        if cmp -s "$f" "$target"; then
+            skipped_count=$((skipped_count + 1))
+        else
+            echo "[rappterbox]   ⚠ $name exists with different content — skipping (rule: never overwrite local data)"
+            skipped_count=$((skipped_count + 1))
+        fi
+    else
+        cp "$f" "$target"
+        new_count=$((new_count + 1))
+    fi
+done
+echo "[rappterbox] cartridges: $new_count new, $skipped_count already-present"
 
-# Bootstrap venv + dependencies
-echo "[rappterbox] bootstrapping venv at $INSTALL_DIR/venv …"
-PYTHON_CMD=$(command -v python3.11 || command -v python3.12 || command -v python3.13 || command -v python3)
-if [ -z "$PYTHON_CMD" ]; then
-    echo "[rappterbox] FAIL: no python3 on PATH. Install Python 3.10+ and re-run."
-    exit 1
+# Layer 2: expansion packs ship as a tree at ~/.brainstem/expansion_packs/
+mkdir -p "$BRAINSTEM_DIR/expansion_packs"
+cp -R "$RAPPTERBOX_DIR/expansion_packs/." "$BRAINSTEM_DIR/expansion_packs/" 2>/dev/null || true
+echo "[rappterbox] expansion packs available at $BRAINSTEM_DIR/expansion_packs/"
+
+# Layer 3: the expansion-pack installer helper script
+mkdir -p "$BRAINSTEM_DIR/installer"
+cp "$RAPPTERBOX_DIR/installer/install-expansion-pack.sh" "$BRAINSTEM_DIR/installer/install-expansion-pack.sh"
+chmod +x "$BRAINSTEM_DIR/installer/install-expansion-pack.sh"
+
+# Layer 4: the rappterbox dashboard (Xbox-360-style console UI)
+if [ -f "$RAPPTERBOX_DIR/console.html" ]; then
+    mkdir -p "$BRAINSTEM_DIR/utils/web"
+    cp "$RAPPTERBOX_DIR/console.html" "$BRAINSTEM_DIR/utils/web/console.html"
+    echo "[rappterbox] dashboard available at /web/console.html when the brainstem is running"
 fi
-"$PYTHON_CMD" -m venv "$INSTALL_DIR/venv"
-"$INSTALL_DIR/venv/bin/pip" install -r "$INSTALL_DIR/requirements.txt" -q
 
-# Install requested expansion packs
+# Apply requested expansion packs (--with foo --with bar)
 for pack in "${WITH_PACKS[@]}"; do
+    echo ""
     echo "[rappterbox] installing expansion pack: $pack"
-    bash "$INSTALL_DIR/installer/install-expansion-pack.sh" "$pack"
+    bash "$BRAINSTEM_DIR/installer/install-expansion-pack.sh" "$pack"
 done
 
 cat <<EOF
 
-[rappterbox] ✓ Console installed at $INSTALL_DIR
+[rappterbox] ─────────────────────────────────────────────────
+[rappterbox] ✓ Console installed at $BRAINSTEM_DIR
+[rappterbox] ─────────────────────────────────────────────────
 
-Bundled cartridges (Wii Sports):
+Bundled cartridges (Wii Sports — already in agents/):
   • ManageMemory       — save typed memories that persist across chats
-  • ContextMemory      — recall memories at conversation start
+  • ContextMemory      — recall saved memories at conversation start
   • HackerNews         — top stories from HN's public Firebase API
-  • LearnNewAgent      — meta-agent that creates other agents at runtime
+  • LearnNewAgent      — meta-cartridge: generates new agents at runtime
+
+Available expansion packs:
+$(ls "$BRAINSTEM_DIR/expansion_packs/" 2>/dev/null | sed 's/^/  • /')
 
 Boot the console:
-  bash $INSTALL_DIR/start.sh
+  bash $BRAINSTEM_DIR/start.sh
   # → chat surface at http://127.0.0.1:7071
+  # → dashboard at  http://127.0.0.1:7071/web/console.html
 
-Add the twin expansion pack (anytime, after install):
-  bash $INSTALL_DIR/installer/install-expansion-pack.sh twin
+Add an expansion pack (anytime):
+  bash $BRAINSTEM_DIR/installer/install-expansion-pack.sh <pack-name>
 
-List available expansion packs:
-  ls $INSTALL_DIR/expansion_packs/
+Specification:
+  https://github.com/kody-w/rappterbox/blob/main/SPEC.md
+
 EOF
