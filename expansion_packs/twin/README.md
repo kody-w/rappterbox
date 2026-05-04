@@ -9,7 +9,7 @@ Two cartridges that turn the console into a twin generator + transporter:
 
 ## Install
 
-After running the rappbox console installer:
+After running the rappterbox console installer:
 
 ```bash
 bash ~/.brainstem/installer/install-expansion-pack.sh twin
@@ -19,7 +19,7 @@ bash ~/.brainstem/start.sh    # restart to pick up the new cartridges
 Or install the console + this pack in one shot:
 
 ```bash
-curl -fsSL https://kody-w.github.io/rappbox-console/installer/install.sh | bash -s -- --with twin
+curl -fsSL https://kody-w.github.io/rappterbox/installer/install.sh | bash -s -- --with twin
 ```
 
 ## Use it (in chat)
@@ -45,4 +45,4 @@ bash ~/.rapp-zoo/installer/start.sh    # opens at http://127.0.0.1:7070
 
 ## Contract
 
-These cartridges follow the static-ancestor rule: the rappbox console is the immutable substrate, the cartridges plug into its existing interface and produce organisms in canonical paths (`~/.rapp/twins/<rappid>/`). They never modify the console.
+These cartridges follow the static-ancestor rule: the rappterbox console is the immutable substrate, the cartridges plug into its existing interface and produce organisms in canonical paths (`~/.rapp/twins/<rappid>/`). They never modify the console.

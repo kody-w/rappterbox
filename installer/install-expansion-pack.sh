@@ -42,11 +42,11 @@ for f in "$PACK_DIR"/*_agent.py; do
 
     if [ -f "$target" ]; then
         if cmp -s "$f" "$target"; then
-            echo "[rappbox] $base already installed — identical, skipping"
+            echo "[rappterbox] $base already installed — identical, skipping"
             skipped=$((skipped + 1))
             continue
         else
-            echo "[rappbox] WARNING: $target already exists with different content — refusing to overwrite (rule: never overwrite local data)"
+            echo "[rappterbox] WARNING: $target already exists with different content — refusing to overwrite (rule: never overwrite local data)"
             echo "          To proceed, delete $target manually and re-run."
             skipped=$((skipped + 1))
             continue
@@ -54,12 +54,12 @@ for f in "$PACK_DIR"/*_agent.py; do
     fi
 
     cp "$f" "$target"
-    echo "[rappbox] installed: $base"
+    echo "[rappterbox] installed: $base"
     count=$((count + 1))
 done
 
 echo ""
-echo "[rappbox] expansion pack '$PACK' installed: $count new, $skipped existing"
+echo "[rappterbox] expansion pack '$PACK' installed: $count new, $skipped existing"
 echo ""
 if [ "$count" -gt 0 ]; then
     echo "Restart the brainstem so the new cartridges load:"

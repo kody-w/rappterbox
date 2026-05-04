@@ -1,15 +1,15 @@
-# rappbox console
+# rappterbox console
 
 > **A static, local-first runtime for digital organisms — with a cartridge slot.**
 
-The rappbox console is a small Python/Flask brainstem that boots on your machine, exposes a chat surface at `http://127.0.0.1:7071`, and loads `*_agent.py` cartridges from `agents/`. Think Wii: the hardware is sealed and never changes; the games are cartridges you swap in.
+The rappterbox console is a small Python/Flask brainstem that boots on your machine, exposes a chat surface at `http://127.0.0.1:7071`, and loads `*_agent.py` cartridges from `agents/`. Think Wii: the hardware is sealed and never changes; the games are cartridges you swap in.
 
 The kernel is **sacred and drop-in replaceable** (Constitution Article XXXIII). Cartridges conform to the kernel's `BasicAgent` contract; they never modify the kernel.
 
 ## Install
 
 ```bash
-curl -fsSL https://kody-w.github.io/rappbox-console/installer/install.sh | bash
+curl -fsSL https://kody-w.github.io/rappterbox/installer/install.sh | bash
 bash ~/.brainstem/start.sh
 ```
 
@@ -18,7 +18,7 @@ Open <http://127.0.0.1:7071> for the chat surface.
 To install with the **twin expansion pack** (`SummonTwin` + `HatchEgg`):
 
 ```bash
-curl -fsSL https://kody-w.github.io/rappbox-console/installer/install.sh | bash -s -- --with twin
+curl -fsSL https://kody-w.github.io/rappterbox/installer/install.sh | bash -s -- --with twin
 ```
 
 ## What's bundled (Wii Sports)
