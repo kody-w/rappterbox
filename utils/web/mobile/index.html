@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Twin">
+<meta name="theme-color" content="#0d1117">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.svg">
+<link rel="icon" href="icon-192.svg">
+<title>Twin</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overscroll-behavior: none; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: #0d1117; color: #e6edf3;
+    display: flex; flex-direction: column; height: 100vh; height: 100dvh;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  button { font-family: inherit; }
+
+  /* ── Top bar ─────────────────────────────────────────── */
+  header {
+    display: flex; align-items: center; gap: 8px;
+    padding: env(safe-area-inset-top, 12px) 14px 10px;
+    border-bottom: 1px solid #21262d; background: #161b22;
+    flex-shrink: 0;
+  }
+  .twin-pill {
+    flex: 1; min-width: 0;
+    display: flex; align-items: center; gap: 8px;
+    background: #0d1117; border: 1px solid #30363d; border-radius: 10px;
+    padding: 8px 10px; cursor: pointer;
+  }
+  .twin-pill:active { background: #21262d; }
+  .twin-avatar {
+    width: 30px; height: 30px; border-radius: 8px; background: #1f6feb;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700; font-size: 14px; flex-shrink: 0;
+  }
+  .twin-avatar.imported { background: #6e7681; }
+  .twin-meta { flex: 1; min-width: 0; }
+  .twin-meta .h { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .twin-meta .s { font-size: 10px; color: #8b949e; font-family: "SF Mono", monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chev { color: #8b949e; font-size: 12px; }
+  .icon-btn {
+    background: #0d1117; border: 1px solid #30363d; color: #c9d1d9;
+    width: 38px; height: 38px; border-radius: 10px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; flex-shrink: 0;
+  }
+  .icon-btn:active { background: #21262d; }
+
+  /* online/offline indicator */
+  .net-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: #3fb950;
+    animation: pulse 2s infinite;
+  }
+  .net-dot.offline { background: #f85149; animation: none; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+  .pending-badge {
+    background: #d29922; color: #0d1117; font-size: 10px; font-weight: 700;
+    padding: 1px 6px; border-radius: 999px; margin-left: 6px;
+  }
+
+  /* swarm strip */
+  .swarm-strip {
+    display: flex; gap: 6px; overflow-x: auto; padding: 8px 12px;
+    border-bottom: 1px solid #21262d; background: #161b22;
+    flex-shrink: 0; scrollbar-width: none;
+  }
+  .swarm-strip::-webkit-scrollbar { display: none; }
+  .swarm-tab {
+    background: #0d1117; border: 1px solid #30363d; color: #c9d1d9;
+    padding: 6px 12px; border-radius: 999px; font-size: 12px;
+    white-space: nowrap; cursor: pointer; flex-shrink: 0;
+  }
+  .swarm-tab.active { background: #1f6feb; border-color: #388bfd; color: #fff; }
+  .swarm-tab.add { color: #8b949e; }
+
+  /* ── Chat log ──────────────────────────────────────── */
+  .chat-log {
+    flex: 1; overflow-y: auto; padding: 14px;
+    display: flex; flex-direction: column; gap: 10px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .msg {
+    max-width: 85%; padding: 10px 14px; border-radius: 14px;
+    font-size: 14px; line-height: 1.45; white-space: pre-wrap; word-wrap: break-word;
+  }
+  .msg.user { align-self: flex-end; background: #1f6feb; color: #fff; border-bottom-right-radius: 4px; }
+  .msg.assistant { align-self: flex-start; background: #21262d; border-bottom-left-radius: 4px; }
+  .msg.tool {
+    align-self: flex-start; background: #0d1117; border: 1px dashed #30363d;
+    color: #8b949e; font-family: "SF Mono", monospace; font-size: 11px; max-width: 100%;
+  }
+  .msg.system-hint {
+    align-self: center; background: transparent; color: #8b949e;
+    font-size: 12px; font-style: italic; padding: 4px 12px;
+  }
+
+  /* ── Input row ─────────────────────────────────────── */
+  .input-row {
+    border-top: 1px solid #21262d; background: #161b22;
+    padding: 10px 12px env(safe-area-inset-bottom, 14px);
+    display: flex; gap: 8px; align-items: flex-end; flex-shrink: 0;
+  }
+  .input-row textarea {
+    flex: 1; resize: none; min-height: 44px; max-height: 140px;
+    background: #0d1117; color: #e6edf3; border: 1px solid #30363d;
+    border-radius: 12px; padding: 11px 14px; font-family: inherit; font-size: 14px;
+    outline: none;
+  }
+  .input-row textarea:focus { border-color: #1f6feb; }
+  .send-btn {
+    background: #238636; border: 1px solid #2ea043; color: #fff;
+    border-radius: 12px; width: 44px; height: 44px; cursor: pointer;
+    font-size: 18px; flex-shrink: 0;
+  }
+  .send-btn:disabled { opacity: .5; }
+
+  /* ── Drawer (twins / settings / docs) ───────────── */
+  .drawer-bg {
+    position: fixed; inset: 0; background: rgba(0,0,0,.7);
+    display: none; z-index: 100; align-items: flex-end;
+  }
+  .drawer-bg.open { display: flex; }
+  .drawer {
+    width: 100%; max-height: 90vh; background: #161b22;
+    border-top-left-radius: 18px; border-top-right-radius: 18px;
+    padding: 14px 16px env(safe-area-inset-bottom, 16px);
+    overflow-y: auto;
+  }
+  .drawer h3 {
+    font-size: 16px; margin-bottom: 12px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .drawer h3 .x { color: #8b949e; cursor: pointer; font-size: 22px; padding: 0 6px; }
+  .row {
+    display: flex; align-items: center; gap: 10px; padding: 10px 0;
+    border-bottom: 1px solid #21262d;
+  }
+  .row:last-child { border-bottom: none; }
+  .row .body { flex: 1; min-width: 0; }
+  .row .title { font-size: 14px; font-weight: 500; }
+  .row .sub { font-size: 11px; color: #8b949e; font-family: "SF Mono", monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row.active { background: rgba(31,111,235,.1); margin: 0 -10px; padding-left: 10px; padding-right: 10px; border-radius: 8px; }
+  .badge-self     { background: #1f6feb; color: #fff; font-size: 10px; padding: 2px 7px; border-radius: 999px; font-weight: 700; }
+  .badge-imported { background: #6e7681; color: #fff; font-size: 10px; padding: 2px 7px; border-radius: 999px; font-weight: 700; }
+
+  .form-row { margin-bottom: 12px; }
+  .form-row label { display: block; font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+  .form-row input, .form-row select, .form-row textarea {
+    width: 100%; background: #0d1117; color: #e6edf3;
+    border: 1px solid #30363d; border-radius: 8px; padding: 10px 12px;
+    font-size: 13px; font-family: "SF Mono", monospace; outline: none;
+  }
+  .form-row input:focus { border-color: #1f6feb; }
+
+  .btn {
+    background: #21262d; border: 1px solid #30363d; color: #e6edf3;
+    padding: 10px 14px; border-radius: 8px; cursor: pointer;
+    font-size: 13px; font-family: inherit;
+  }
+  .btn.primary { background: #238636; border-color: #2ea043; color: #fff; }
+  .btn.danger { color: #f85149; border-color: #f85149; }
+  .btn.ghost { background: transparent; border-color: transparent; color: #58a6ff; padding: 6px 8px; }
+
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+
+  .toast {
+    position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+    background: #161b22; color: #e6edf3; border: 1px solid #30363d;
+    padding: 10px 16px; border-radius: 10px; font-size: 13px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.4); z-index: 200;
+    opacity: 0; transition: opacity .25s; max-width: 90vw; text-align: center;
+  }
+  .toast.show { opacity: 1; }
+  .toast.bad { border-color: #f85149; }
+  .toast.ok { border-color: #2ea043; }
+
+  .empty {
+    text-align: center; color: #8b949e; padding: 20px;
+    border: 1px dashed #30363d; border-radius: 10px; font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="twin-pill" id="twin-pill">
+    <div class="twin-avatar" id="twin-av">?</div>
+    <div class="twin-meta">
+      <div class="h" id="twin-handle">—</div>
+      <div class="s" id="twin-cid">—</div>
+    </div>
+    <span class="chev">▾</span>
+  </div>
+  <div class="icon-btn" id="net-btn" title="Network status">
+    <span class="net-dot" id="net-dot"></span>
+  </div>
+  <div class="icon-btn" id="docs-btn" title="Documents">📄</div>
+  <div class="icon-btn" id="settings-btn" title="Settings">⚙</div>
+</header>
+
+<div class="swarm-strip" id="swarm-strip"></div>
+
+<div class="chat-log" id="chat-log">
+  <div class="msg system-hint">Say hello to your twin to get started.</div>
+</div>
+
+<div class="input-row">
+  <textarea id="input" placeholder="Talk to your twin…" rows="1"></textarea>
+  <button class="send-btn" id="send">↑</button>
+</div>
+
+<!-- ── Twin drawer ── -->
+<div class="drawer-bg" id="twins-bg">
+  <div class="drawer">
+    <h3>Your twins <span class="x" data-close="twins-bg">×</span></h3>
+    <div id="twins-list"></div>
+    <h3 style="margin-top: 16px; font-size: 14px;">Pull a twin from the global registry</h3>
+    <div id="registry-list"><div class="empty">Loading registry…</div></div>
+    <div class="actions">
+      <button class="btn ghost" id="add-blank-twin">+ New blank self twin</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Documents drawer ── -->
+<div class="drawer-bg" id="docs-bg">
+  <div class="drawer">
+    <h3>Documents <span class="x" data-close="docs-bg">×</span></h3>
+    <h4 style="font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 1.5px; margin: 12px 0 6px;">Documents</h4>
+    <div id="docs-list"><div class="empty">No documents yet.</div></div>
+    <h4 style="font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 1.5px; margin: 12px 0 6px;">Inbox</h4>
+    <div id="inbox-list"><div class="empty">Empty inbox.</div></div>
+    <h4 style="font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 1.5px; margin: 12px 0 6px;">Outbox</h4>
+    <div id="outbox-list"><div class="empty">No sent docs.</div></div>
+    <div class="actions">
+      <button class="btn primary" id="new-doc-btn">+ New document</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Settings drawer ── -->
+<div class="drawer-bg" id="settings-bg">
+  <div class="drawer">
+    <h3>Settings <span class="x" data-close="settings-bg">×</span></h3>
+    <p style="font-size: 12px; color: #8b949e; margin-bottom: 14px;">Keys are stored in IndexedDB on this device only. They're sent to the LLM endpoint you choose, never to anyone else.</p>
+
+    <div class="form-row">
+      <label>Azure OpenAI endpoint</label>
+      <input type="text" id="s-az-endpoint" placeholder="https://…/openai/v1/chat/completions or full deployment URL" autocomplete="off">
+    </div>
+    <div class="form-row">
+      <label>Azure OpenAI API key</label>
+      <input type="password" id="s-az-key" placeholder="key from Azure portal" autocomplete="off">
+    </div>
+    <div class="form-row">
+      <label>Azure deployment name</label>
+      <input type="text" id="s-az-deployment" placeholder="e.g. gpt-4o or gpt-5.4" autocomplete="off">
+    </div>
+    <div class="form-row">
+      <label>OpenAI API key (fallback)</label>
+      <input type="password" id="s-oa-key" placeholder="sk-..." autocomplete="off">
+    </div>
+    <div class="form-row">
+      <label>Anthropic API key (fallback)</label>
+      <input type="password" id="s-an-key" placeholder="sk-ant-..." autocomplete="off">
+    </div>
+    <div class="actions">
+      <button class="btn primary" id="save-settings">Save</button>
+      <button class="btn ghost" id="export-twin-btn">⬇ Export active twin</button>
+      <button class="btn ghost" id="export-egg-btn">📦 Export .egg</button>
+      <button class="btn ghost" id="import-egg-btn">📦 Import .egg</button>
+      <input type="file" id="egg-file-input" accept=".egg,.zip" style="display:none">
+      <button class="btn danger" id="wipe-twin-btn">Delete active twin</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="rapp-mobile.js"></script>
+<script>
+'use strict';
+
+const REGISTRY_URL = '../onboard/registry.json';
+const STATE = { twin_id: null, swarm_guid: null, history: [] };
+
+function $(s) { return document.querySelector(s); }
+function el(tag, attrs = {}, kids = []) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v;
+    else if (k === 'text') e.textContent = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
+  }
+  for (const c of (Array.isArray(kids) ? kids : [kids])) {
+    if (c == null) continue;
+    e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+  }
+  return e;
+}
+function toast(msg, kind = '') {
+  const t = $('#toast');
+  t.textContent = msg; t.className = 'toast show ' + kind;
+  setTimeout(() => { t.className = 'toast ' + kind; }, 3000);
+}
+
+// ── Drawers ──
+document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', (e) => {
+  $('#' + e.target.dataset.close).classList.remove('open');
+}));
+document.querySelectorAll('.drawer-bg').forEach(bg => bg.addEventListener('click', (e) => {
+  if (e.target === bg) bg.classList.remove('open');
+}));
+
+// ── Network indicator ──
+function updateNet() {
+  const dot = $('#net-dot');
+  if (navigator.onLine) dot.classList.remove('offline'); else dot.classList.add('offline');
+  RAPP.pendingCount().then(n => {
+    const btn = $('#net-btn');
+    let badge = btn.querySelector('.pending-badge');
+    if (n > 0) {
+      if (!badge) { badge = el('span', { class: 'pending-badge' }); btn.appendChild(badge); }
+      badge.textContent = n;
+    } else if (badge) { badge.remove(); }
+  });
+}
+window.addEventListener('online', async () => {
+  toast('Back online — draining queued messages…', 'ok');
+  const r = await RAPP.drainPendingQueue();
+  if (r.drained > 0) {
+    toast(`✓ Sent ${r.drained} queued message(s)`, 'ok');
+    if (STATE.swarm_guid) await refreshChat();
+  }
+  updateNet();
+});
+window.addEventListener('offline', () => { updateNet(); toast('Offline — your twin still works locally', ''); });
+$('#net-btn').addEventListener('click', updateNet);
+
+// ── Twin pill / drawer ──
+$('#twin-pill').addEventListener('click', renderTwinsDrawer);
+
+async function renderTwinPill() {
+  const t = await RAPP.getTwin(STATE.twin_id);
+  if (!t) return;
+  $('#twin-handle').textContent = t.handle;
+  $('#twin-cid').textContent = `${t.kind} · ${t.cloud_id.slice(0, 12)}…`;
+  $('#twin-av').textContent = t.handle.replace('@', '').slice(0, 1).toUpperCase() || '?';
+  $('#twin-av').className = 'twin-avatar' + (t.kind === 'imported' ? ' imported' : '');
+}
+
+async function renderTwinsDrawer() {
+  $('#twins-bg').classList.add('open');
+  const list = $('#twins-list');
+  list.innerHTML = '';
+  const twins = await RAPP.listTwins();
+  for (const t of twins) {
+    const isActive = t.twin_id === STATE.twin_id;
+    list.appendChild(el('div', { class: 'row' + (isActive ? ' active' : '') }, [
+      el('div', { class: 'twin-avatar' + (t.kind === 'imported' ? ' imported' : ''),
+                   text: (t.handle || '?').replace('@','').slice(0,1).toUpperCase() }),
+      el('div', { class: 'body' }, [
+        el('div', { class: 'title', text: t.handle }),
+        el('div', { class: 'sub', text: `${t.kind} · ${t.cloud_id.slice(0, 16)}…` }),
+      ]),
+      el('span', { class: t.kind === 'self' ? 'badge-self' : 'badge-imported',
+                    text: t.kind === 'self' ? 'SELF' : 'IMPORT' }),
+      isActive ? null : el('button', { class: 'btn ghost', onclick: async (e) => {
+        e.stopPropagation();
+        await switchTwin(t.twin_id);
+        $('#twins-bg').classList.remove('open');
+      }, text: 'Use' }),
+    ]));
+  }
+  // Render registry
+  const regList = $('#registry-list');
+  regList.innerHTML = '<div class="empty">Loading registry…</div>';
+  try {
+    const r = await fetch(REGISTRY_URL, { cache: 'force-cache' });  // works offline if cached
+    const reg = await r.json();
+    regList.innerHTML = '';
+    const all = [...(reg.hero_humans || []), ...(reg.hero_role_twins || [])];
+    for (const c of all) {
+      regList.appendChild(el('div', { class: 'row' }, [
+        el('div', { class: 'twin-avatar imported', text: c.icon || '🤖' }),
+        el('div', { class: 'body' }, [
+          el('div', { class: 'title', text: c.title }),
+          el('div', { class: 'sub', text: c.tagline || c.for || '' }),
+        ]),
+        el('button', { class: 'btn primary', onclick: async (e) => {
+          e.stopPropagation();
+          try {
+            const t = await RAPP.pullTwinFromRegistry(REGISTRY_URL, c.id);
+            toast(`Pulled ${t.handle} (${t.kind})`, 'ok');
+            await switchTwin(t.twin_id);
+            $('#twins-bg').classList.remove('open');
+          } catch (e) { toast(`Pull failed: ${e.message}`, 'bad'); }
+        }, text: '⬇ Pull' }),
+      ]));
+    }
+  } catch (e) {
+    regList.innerHTML = `<div class="empty">Registry unavailable offline. Pull at least one twin while online to use it later.</div>`;
+  }
+}
+
+$('#add-blank-twin').addEventListener('click', async () => {
+  const handle = prompt('Handle for the new twin (e.g. @alex.local):', '@new.local') || '@new.local';
+  const t = await RAPP.createSelfTwin(handle);
+  await switchTwin(t.twin_id);
+  $('#twins-bg').classList.remove('open');
+});
+
+async function switchTwin(twin_id) {
+  STATE.twin_id = twin_id;
+  await RAPP.setActiveTwin(twin_id);
+  STATE.swarm_guid = null;
+  await renderTwinPill();
+  await renderSwarmStrip();
+}
+
+// ── Swarm strip ──
+async function renderSwarmStrip() {
+  const strip = $('#swarm-strip');
+  strip.innerHTML = '';
+  const swarms = await RAPP.listSwarms(STATE.twin_id);
+  if (!swarms.length) {
+    strip.appendChild(el('div', { class: 'swarm-tab', text: '(no swarms — pull a twin or hatch one)' }));
+    $('#chat-log').innerHTML = '<div class="msg system-hint">Open the twin switcher (▾) to pull a public twin from the registry.</div>';
+    return;
+  }
+  if (!STATE.swarm_guid) STATE.swarm_guid = swarms[0].swarm_guid;
+  for (const s of swarms) {
+    const tab = el('div', { class: 'swarm-tab' + (s.swarm_guid === STATE.swarm_guid ? ' active' : ''), text: s.name });
+    tab.addEventListener('click', () => { STATE.swarm_guid = s.swarm_guid; renderSwarmStrip(); refreshChat(); });
+    strip.appendChild(tab);
+  }
+  await refreshChat();
+}
+
+// ── Chat ──
+async function refreshChat() {
+  const log = $('#chat-log');
+  log.innerHTML = '';
+  if (!STATE.swarm_guid) {
+    log.appendChild(el('div', { class: 'msg system-hint',
+      text: 'Pick a swarm above to start chatting.' }));
+    return;
+  }
+  STATE.history = await RAPP.loadConversation(STATE.twin_id, STATE.swarm_guid);
+  for (const m of STATE.history) {
+    if (m.role === 'system') continue;
+    log.appendChild(el('div', { class: 'msg ' + m.role, text: m.content || '' }));
+  }
+  log.scrollTop = log.scrollHeight;
+}
+
+$('#send').addEventListener('click', sendMessage);
+$('#input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey && !navigator.userAgent.includes('Mobile')) {
+    e.preventDefault(); sendMessage();
+  }
+});
+$('#input').addEventListener('input', (e) => {
+  const ta = e.target;
+  ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px';
+});
+
+async function sendMessage() {
+  const ta = $('#input');
+  const text = ta.value.trim();
+  if (!text || !STATE.swarm_guid) return;
+  ta.value = ''; ta.style.height = 'auto';
+
+  const log = $('#chat-log');
+  // Optimistic UI: render user message immediately (local, no waiting)
+  log.appendChild(el('div', { class: 'msg user', text }));
+  log.scrollTop = log.scrollHeight;
+
+  // Show typing indicator
+  const typing = el('div', { class: 'msg system-hint', text: '…' });
+  log.appendChild(typing);
+
+  const result = await RAPP.chatWithSwarmResilient(STATE.twin_id, STATE.swarm_guid, text, STATE.history);
+  typing.remove();
+  STATE.history = await RAPP.loadConversation(STATE.twin_id, STATE.swarm_guid);
+
+  // Render tool logs (compact)
+  for (const t of (result.agent_logs || [])) {
+    log.appendChild(el('div', { class: 'msg tool', text: `→ ${t.name}(${JSON.stringify(t.args)}) [${t.ms}ms]` }));
+  }
+  log.appendChild(el('div', { class: 'msg assistant', text: result.response || '' }));
+  log.scrollTop = log.scrollHeight;
+  updateNet();
+}
+
+// ── Documents drawer ──
+$('#docs-btn').addEventListener('click', renderDocsDrawer);
+async function renderDocsDrawer() {
+  $('#docs-bg').classList.add('open');
+  const d = await RAPP.listDocuments(STATE.twin_id);
+  const fill = (id, items, location) => {
+    const div = $('#' + id);
+    div.innerHTML = '';
+    if (!items.length) { div.innerHTML = '<div class="empty">Empty.</div>'; return; }
+    for (const it of items) {
+      div.appendChild(el('div', { class: 'row' }, [
+        el('div', { class: 'body' }, [
+          el('div', { class: 'title', text: it.name }),
+          el('div', { class: 'sub', text: `${it.bytes}b · ${new Date(it.modified_at).toLocaleString()}` }),
+        ]),
+        el('button', { class: 'btn ghost', onclick: async () => {
+          const doc = await RAPP.readDocument(STATE.twin_id, it.name, location);
+          alert(atob(doc.content_b64));
+        }, text: '👁' }),
+        el('button', { class: 'btn danger ghost', onclick: async () => {
+          if (!confirm(`Delete ${it.name}?`)) return;
+          await RAPP.deleteDocument(STATE.twin_id, it.name, location);
+          renderDocsDrawer();
+        }, text: '✕' }),
+      ]));
+    }
+  };
+  fill('docs-list',   d.documents, 'documents');
+  fill('inbox-list',  d.inbox,     'inbox');
+  fill('outbox-list', d.outbox,    'outbox');
+}
+$('#new-doc-btn').addEventListener('click', async () => {
+  const name = prompt('Document name (e.g. notes.md):'); if (!name) return;
+  const text = prompt('Content:'); if (text == null) return;
+  const bytes = new TextEncoder().encode(text);
+  await RAPP.writeDocument(STATE.twin_id, name, bytes, 'documents');
+  toast('Saved locally', 'ok');
+  renderDocsDrawer();
+});
+
+// ── Settings drawer ──
+$('#settings-btn').addEventListener('click', async () => {
+  $('#settings-bg').classList.add('open');
+  const s = await RAPP.getSettings();
+  $('#s-az-endpoint').value   = s.azure_endpoint   || '';
+  $('#s-az-key').value         = s.azure_api_key    || '';
+  $('#s-az-deployment').value  = s.azure_deployment || '';
+  $('#s-oa-key').value          = s.openai_api_key   || '';
+  $('#s-an-key').value          = s.anthropic_api_key || '';
+});
+$('#save-settings').addEventListener('click', async () => {
+  await RAPP.setSettings({
+    azure_endpoint:   $('#s-az-endpoint').value.trim(),
+    azure_api_key:    $('#s-az-key').value.trim(),
+    azure_deployment: $('#s-az-deployment').value.trim(),
+    openai_api_key:    $('#s-oa-key').value.trim(),
+    anthropic_api_key: $('#s-an-key').value.trim(),
+  });
+  toast('Settings saved (local only)', 'ok');
+  $('#settings-bg').classList.remove('open');
+});
+$('#export-twin-btn').addEventListener('click', async () => {
+  const bundle = await RAPP.exportTwin(STATE.twin_id, { includeConversations: true, includeDocuments: true });
+  const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `twin-${(bundle.handle||'export').replace('@','')}.json`;
+  a.click();
+});
+$('#export-egg-btn').addEventListener('click', async () => {
+  try {
+    const bundle = await RAPP.exportEgg(STATE.twin_id);
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'digitaltwin.rappid.egg.json';
+    a.click();
+    toast('Egg exported', 'ok');
+  } catch (e) { toast('Export failed: ' + e.message, 'err'); }
+});
+$('#import-egg-btn').addEventListener('click', () => { $('#egg-file-input').click(); });
+$('#egg-file-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
+  try {
+    let twin;
+    if (file.name.endsWith('.egg') || file.name.endsWith('.zip')) {
+      twin = await RAPP.importEgg(file);
+    } else {
+      const text = await file.text();
+      const bundle = JSON.parse(text);
+      twin = await RAPP.importTwinBundle(bundle, { handle: bundle.handle || '@imported' });
+    }
+    await RAPP.setActiveTwin(twin.twin_id);
+    STATE.twin_id = twin.twin_id;
+    await renderTwinPill();
+    await renderSwarmStrip();
+    $('#settings-bg').classList.remove('open');
+    toast('Egg imported — twin active', 'ok');
+  } catch (e) { toast('Import failed: ' + e.message, 'err'); }
+});
+$('#wipe-twin-btn').addEventListener('click', async () => {
+  if (!confirm('Delete the active twin and all its local state? This cannot be undone.')) return;
+  await RAPP.deleteTwin(STATE.twin_id);
+  STATE.twin_id = await RAPP.getActiveTwinId();
+  await renderTwinPill();
+  await renderSwarmStrip();
+  $('#settings-bg').classList.remove('open');
+  toast('Twin deleted', 'ok');
+});
+
+// ── Service worker (offline shell) ──
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('service-worker.js').catch(() => {});
+}
+
+// ── Boot ──
+(async function boot() {
+  STATE.twin_id = await RAPP.getActiveTwinId();
+  await renderTwinPill();
+  await renderSwarmStrip();
+  updateNet();
+  setInterval(updateNet, 5000);
+})();
+</script>
+
+</body>
+</html>

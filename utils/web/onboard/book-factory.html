@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Book Factory — agent.py all the way down</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: #0d1117; color: #e6edf3;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+  a { color: #58a6ff; }
+  main { max-width: 1100px; margin: 0 auto; padding: 28px 24px 80px; }
+
+  header {
+    display: flex; align-items: center; gap: 12px;
+    border-bottom: 1px solid #21262d; padding-bottom: 18px; margin-bottom: 28px;
+  }
+  header .icon { font-size: 32px; }
+  header h1 { font-size: 22px; font-weight: 700; }
+  header h1 .sub { font-size: 12px; color: #8b949e; font-family: "SF Mono", monospace;
+    text-transform: uppercase; letter-spacing: 1.5px; display: block; margin-top: 2px; }
+
+  .status-bar {
+    background: #161b22; border: 1px solid #21262d; border-radius: 10px;
+    padding: 12px 16px; display: flex; align-items: center; gap: 14px;
+    margin-bottom: 18px; font-size: 13px;
+  }
+  .status-bar .dot { width: 8px; height: 8px; border-radius: 50%; background: #f85149; }
+  .status-bar .dot.ok { background: #3fb950; }
+  .status-bar .dot.checking { background: #d29922; animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .status-bar code {
+    background: #0d1117; border: 1px solid #30363d; padding: 2px 8px;
+    border-radius: 6px; font-size: 11px; font-family: "SF Mono", monospace;
+  }
+  .status-bar .right { margin-left: auto; color: #8b949e; font-size: 11px; font-family: "SF Mono", monospace; }
+
+  .form-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+  .form-row label { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: .5px; }
+  .form-row input, .form-row textarea {
+    background: #0d1117; color: #e6edf3; border: 1px solid #30363d; border-radius: 8px;
+    padding: 9px 12px; font-family: inherit; font-size: 13px; outline: none; width: 100%;
+  }
+  .form-row textarea { font-family: "SF Mono", ui-monospace, monospace; font-size: 11px; min-height: 140px; resize: vertical; }
+  .form-row input:focus, .form-row textarea:focus { border-color: #1f6feb; }
+
+  .controls { display: flex; gap: 8px; margin: 18px 0 28px; flex-wrap: wrap; }
+  .btn {
+    background: #21262d; border: 1px solid #30363d; color: #e6edf3;
+    padding: 10px 20px; border-radius: 8px; cursor: pointer;
+    font-family: inherit; font-size: 13px; font-weight: 500;
+    transition: all .15s;
+  }
+  .btn:hover:not(:disabled) { border-color: #58a6ff; color: #58a6ff; }
+  .btn.primary { background: #238636; border-color: #2ea043; color: #fff; }
+  .btn.primary:hover:not(:disabled) { background: #2ea043; color: #fff; border-color: #3fb950; }
+  .btn.run { background: #1f6feb; border-color: #388bfd; color: #fff; font-weight: 700; padding: 12px 28px; }
+  .btn.run:hover:not(:disabled) { background: #388bfd; color: #fff; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+  /* ── Pipeline timeline ── */
+  .timeline { display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px; }
+  .step {
+    background: #161b22; border: 1px solid #21262d; border-radius: 10px;
+    padding: 12px 16px;
+    transition: border-color .2s;
+  }
+  .step.running { border-color: #d29922; background: rgba(210,153,34,.05); }
+  .step.done    { border-color: #2ea043; }
+  .step.error   { border-color: #f85149; }
+
+  .step-head { display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
+  .step-num {
+    width: 28px; height: 28px; border-radius: 50%; background: #30363d; color: #c9d1d9;
+    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px;
+    flex-shrink: 0;
+  }
+  .step.running .step-num { background: #d29922; color: #0d1117; }
+  .step.done    .step-num { background: #2ea043; color: #fff; }
+  .step.error   .step-num { background: #f85149; color: #fff; }
+  .step-title { flex: 1; font-weight: 600; font-size: 14px; }
+  .step-meta  { font-size: 11px; color: #8b949e; font-family: "SF Mono", monospace; }
+  .step-toggle { color: #8b949e; font-size: 12px; }
+  .step-body {
+    margin-top: 10px; padding-top: 10px; border-top: 1px solid #21262d;
+    font-family: "SF Mono", ui-monospace, monospace; font-size: 11px;
+    color: #c9d1d9; white-space: pre-wrap; max-height: 260px; overflow-y: auto;
+    display: none;
+  }
+  .step-body.open { display: block; }
+  .step-body .delegate {
+    color: #f0b66f; font-style: italic; padding: 2px 0;
+  }
+
+  /* ── Final chapter ── */
+  .final {
+    background: #0d1117; border: 1px solid #2ea043; border-radius: 12px;
+    padding: 24px 28px; margin-top: 24px;
+    display: none;
+  }
+  .final.show { display: block; }
+  .final h2 {
+    color: #3fb950; font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px;
+    margin-bottom: 16px;
+  }
+  .final-content {
+    font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
+    font-size: 16px; line-height: 1.7; color: #e6edf3;
+    white-space: pre-wrap;
+  }
+
+  .toast {
+    position: fixed; top: 20px; right: 20px;
+    background: #161b22; border: 1px solid #30363d; padding: 10px 16px;
+    border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .25s;
+    box-shadow: 0 4px 16px rgba(0,0,0,.4); z-index: 100;
+  }
+  .toast.show { opacity: 1; }
+  .toast.ok { border-color: #2ea043; }
+  .toast.bad { border-color: #f85149; }
+
+  .help {
+    background: #161b22; border: 1px dashed #30363d; border-radius: 10px;
+    padding: 14px 18px; margin-bottom: 20px; font-size: 12px; color: #8b949e;
+  }
+  .help code { color: #58a6ff; font-family: "SF Mono", monospace; }
+</style>
+</head>
+<body>
+
+<main>
+
+<header>
+  <div class="icon">📚</div>
+  <div>
+    <h1>Book Factory
+      <span class="sub">agent.py all the way down · 8 LLM calls · ONE endpoint</span>
+    </h1>
+  </div>
+</header>
+
+<div class="help" id="help">
+  <strong>Setup:</strong> in a terminal at the repo root, run:<br>
+  <code>python3 swarm/server.py --port 7099 --root /tmp/rapp-bookfactory</code><br>
+  Then this page will hatch the swarm + run the pipeline. Your <code>.env</code> Azure OpenAI key drives the LLM.
+</div>
+
+<div class="status-bar">
+  <span class="dot" id="health-dot"></span>
+  <span>Brainstem:</span>
+  <code id="endpoint-display">http://127.0.0.1:7099</code>
+  <span id="health-text">probing…</span>
+  <span class="right" id="llm-info">—</span>
+</div>
+
+<div class="form-row">
+  <label>Brainstem endpoint</label>
+  <input type="text" id="endpoint" value="http://127.0.0.1:7099" autocomplete="off" spellcheck="false">
+</div>
+
+<div class="form-row">
+  <label>Chapter title</label>
+  <input type="text" id="chapter-title" value="agent.py all the way down" autocomplete="off">
+</div>
+
+<div class="form-row">
+  <label>Source material (pre-injected from this repo's recent build context)</label>
+  <textarea id="source" spellcheck="false"># RAPP — recent build context (auto-injected at page-build time)
+
+## Last 12 commits
+25dc659 Twin Stack v1.3: agent.py all the way down + .egg snapshots
+60cb9ff Twin Stack v1.2: tether bridge, book factory, one-command launcher
+03d379e Fix Azure OpenAI v1 endpoint dispatch in swarm/llm.py
+f423108 Twin Stack v1.1: simulator, workspaces, doc share, mobile PWA
+223fd1e Twin Stack v1: hatch page, T2T, hippocampus brainstem-in-the-cloud
+bf10751 Blog: posts 53-71 — sealing, open-core, patents, pricing, federation, ops
+868002f Swarm: sealing + snapshot — twin-preservation primitives in the public server
+12692b5 Blog: complete the series — posts 21-52 + index
+3d6e3ba Swarm: full multi-tenant deploy server (one endpoint, GUID-routed)
+7834418 Brainstem: rename Hippocampus → Swarm + add Deploy-as-Swarm
+293080a Brainstem: expose every binder agent as a tool (match OG hot-load)
+e5ab3a2 Brainstem: system prompt now matches community RAPP _prepare_messages() exactly
+
+## Architecture posts shipped this week
+  - 72-the-twin-stack.md
+  - 73-twin-simulator.md
+  - 74-document-share-via-t2t.md
+  - 75-the-hero-demo.md
+  - 76-graduated-brainstem.md
+  - 77-isolated-rg-per-twin.md
+  - 78-three-layer-test.md
+  - 79-the-twin-stack-marketing.md
+
+## What the v1.3 commit did
+Replaced the pipeline DSL with agent.py-all-the-way-down composition.
+Each persona is a sacred single-file agent. Composites direct-import
+their dependencies. ONE endpoint runs everything: POST /api/swarm/{guid}/agent.</textarea>
+</div>
+
+<div class="controls">
+  <button class="btn primary" id="hatch-btn">🥚 Hatch swarm</button>
+  <button class="btn run" id="run-btn" disabled>▶ Run book factory</button>
+  <span style="margin-left:auto; align-self:center; font-family:'SF Mono',monospace; font-size:11px; color:#8b949e">
+    swarm_guid: <span id="guid-display">—</span>
+  </span>
+</div>
+
+<div class="timeline" id="timeline">
+  <!-- 5 steps injected by JS -->
+</div>
+
+<div class="final" id="final">
+  <h2>📖 Final Chapter</h2>
+  <div class="final-content" id="final-content"></div>
+</div>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+
+// ─── State ────────────────────────────────────────────────────────────
+
+const STATE = {
+  endpoint: 'http://127.0.0.1:7099',
+  swarm_guid: null,
+  vars: {},      // step outputs flow forward through this
+};
+
+// The 5 visible steps (each is a SINGLE call to the sacred OG path:
+// POST /api/swarm/{guid}/agent {"name":"<persona>"})
+//
+// Some are composites — they do internal LLM work via direct-imported
+// specialist agents. The browser doesn't see those internals; the brainstem
+// just returns the composite's final output.
+const STEPS = [
+  { id: 'writer',    agent: 'Writer',
+    title: 'Writer drafts a chapter',
+    meta: 'leaf · 1 LLM call',
+    args: () => ({ input: STATE.vars.source,
+                    chapter_title: $('#chapter-title').value,
+                    max_words: 800 }),
+    out:  'draft' },
+  { id: 'editor',    agent: 'Editor',
+    title: 'Editor cuts + flags + voice-checks',
+    meta: 'composite · 3 specialist agents',
+    delegates: ['EditorCutweak', 'EditorFactcheck', 'EditorVoicecheck'],
+    args: () => ({ input: STATE.vars.draft }),
+    out:  'edited' },
+  { id: 'ceo',       agent: 'CEO',
+    title: 'CEO strategic review',
+    meta: 'composite · 2 specialist agents',
+    delegates: ['CEORisk', 'CEODecision'],
+    args: () => ({ input: STATE.vars.edited }),
+    out:  'ceo_note' },
+  { id: 'publisher', agent: 'Publisher',
+    title: 'Publisher assembles final chapter',
+    meta: 'leaf · 1 LLM call',
+    args: () => ({ input: STATE.vars.edited,
+                    ceo_note: STATE.vars.ceo_note,
+                    title: $('#chapter-title').value,
+                    author: '@kody' }),
+    out:  'final' },
+  { id: 'reviewer',  agent: 'Reviewer',
+    title: 'Reviewer cold-reads + scores',
+    meta: 'leaf · 1 LLM call',
+    args: () => ({ input: STATE.vars.final }),
+    out:  'review' },
+];
+
+// ─── DOM helpers ─────────────────────────────────────────────────────
+
+function $(s) { return document.querySelector(s); }
+function el(tag, attrs = {}, kids = []) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v;
+    else if (k === 'text') e.textContent = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
+  }
+  for (const c of (Array.isArray(kids) ? kids : [kids])) {
+    if (c == null) continue;
+    e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+  }
+  return e;
+}
+function toast(msg, kind = '') {
+  const t = $('#toast');
+  t.textContent = msg; t.className = 'toast show ' + kind;
+  setTimeout(() => { t.className = 'toast ' + kind; }, 3000);
+}
+
+// ─── Render the 5-step timeline ─────────────────────────────────────
+
+function renderTimeline() {
+  const tl = $('#timeline');
+  tl.innerHTML = '';
+  STEPS.forEach((s, i) => {
+    const head = el('div', { class: 'step-head', onclick: () => {
+      tl.children[i].querySelector('.step-body').classList.toggle('open');
+    }}, [
+      el('div', { class: 'step-num', text: String(i + 1) }),
+      el('div', { class: 'step-title', text: s.title }),
+      el('div', { class: 'step-meta', text: s.meta, id: `meta-${s.id}` }),
+      el('div', { class: 'step-toggle', text: '▾' }),
+    ]);
+    const body = el('div', { class: 'step-body', id: `body-${s.id}` });
+    if (s.delegates) {
+      for (const d of s.delegates) {
+        body.appendChild(el('div', { class: 'delegate', text: `└─ delegates → ${d}` }));
+      }
+    }
+    body.appendChild(el('div', { id: `out-${s.id}`, text: '(waiting…)' }));
+    const stepEl = el('div', { class: 'step', id: `step-${s.id}` }, [head, body]);
+    tl.appendChild(stepEl);
+  });
+}
+
+function setStepStatus(id, status, meta) {
+  const el = $('#step-' + id);
+  el.classList.remove('running', 'done', 'error');
+  if (status) el.classList.add(status);
+  if (meta) $('#meta-' + id).textContent = meta;
+  if (status === 'running') $('#body-' + id).classList.add('open');
+}
+function setStepOutput(id, text) {
+  $('#out-' + id).textContent = text || '(empty)';
+}
+
+// ─── Probe brainstem health ───────────────────────────────────────────
+
+async function probeHealth() {
+  STATE.endpoint = $('#endpoint').value.trim().replace(/\/+$/, '');
+  $('#endpoint-display').textContent = STATE.endpoint;
+  $('#health-dot').className = 'dot checking';
+  $('#health-text').textContent = 'probing…';
+  try {
+    const [hr, lr] = await Promise.all([
+      fetch(STATE.endpoint + '/api/swarm/healthz'),
+      fetch(STATE.endpoint + '/api/llm/status'),
+    ]);
+    const h = await hr.json();
+    const l = await lr.json();
+    $('#health-dot').className = 'dot ok';
+    $('#health-text').textContent = `${h.swarm_count} swarm(s) hosted`;
+    $('#llm-info').textContent = `${l.provider}${l.azure_deployment ? ' · ' + l.azure_deployment : ''}`;
+    return true;
+  } catch (e) {
+    $('#health-dot').className = 'dot';
+    $('#health-text').textContent = 'unreachable — start the brainstem';
+    $('#llm-info').textContent = '—';
+    return false;
+  }
+}
+$('#endpoint').addEventListener('change', probeHealth);
+
+// ─── Hatch — fetch all agent.py files + push as a swarm bundle ───────
+
+async function hatch() {
+  const btn = $('#hatch-btn');
+  btn.disabled = true; btn.textContent = '… fetching agent.py files';
+
+  // Fetch every agent file that contributes to BookFactory.
+  const AGENT_FILES = [
+    'persona_writer_agent.py',
+    'persona_editor_agent.py', 'editor_cutweak_agent.py',
+    'editor_factcheck_agent.py', 'editor_voicecheck_agent.py',
+    'persona_ceo_agent.py', 'ceo_risk_agent.py', 'ceo_decision_agent.py',
+    'persona_publisher_agent.py', 'persona_reviewer_agent.py',
+    'book_factory_agent.py',
+  ];
+  const agents = [];
+  for (const f of AGENT_FILES) {
+    const r = await fetch('../../agents/' + f);
+    if (!r.ok) {
+      toast(`failed to fetch agents/${f} (${r.status})`, 'bad');
+      btn.disabled = false; btn.textContent = '🥚 Hatch swarm';
+      return;
+    }
+    agents.push({ filename: f, source: await r.text() });
+  }
+
+  btn.textContent = '… deploying to brainstem';
+  const bundle = {
+    schema: 'rapp-swarm/1.0',
+    name: 'book-factory',
+    soul: 'agent.py-all-the-way-down content pipeline.',
+    agents,
+  };
+  try {
+    const r = await fetch(STATE.endpoint + '/api/swarm/deploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bundle),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.message || ('HTTP ' + r.status));
+    STATE.swarm_guid = j.swarm_guid;
+    $('#guid-display').textContent = j.swarm_guid.slice(0, 8) + '…' + j.swarm_guid.slice(-4);
+    btn.textContent = '✓ Hatched';
+    btn.classList.remove('primary');
+    $('#run-btn').disabled = false;
+    toast(`✓ Hatched ${agents.length} agents`, 'ok');
+    await probeHealth();
+  } catch (e) {
+    toast('Hatch failed: ' + e.message, 'bad');
+    btn.disabled = false; btn.textContent = '🥚 Hatch swarm';
+  }
+}
+$('#hatch-btn').addEventListener('click', hatch);
+
+// ─── Run — call each persona in sequence, live UI updates ──────────
+
+async function callAgent(name, args) {
+  const r = await fetch(STATE.endpoint + `/api/swarm/${STATE.swarm_guid}/agent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, args }),
+  });
+  const j = await r.json();
+  if (!r.ok || j.status !== 'ok') {
+    throw new Error(j.message || ('HTTP ' + r.status));
+  }
+  return j.output || '';
+}
+
+async function run() {
+  const btn = $('#run-btn'); btn.disabled = true; btn.textContent = '▶ Running…';
+  STATE.vars = { source: $('#source').value };
+  // Reset
+  STEPS.forEach(s => { setStepStatus(s.id, '', s.meta); setStepOutput(s.id, '(waiting…)'); });
+  $('#final').classList.remove('show');
+
+  const overallStart = Date.now();
+  try {
+    for (const step of STEPS) {
+      setStepStatus(step.id, 'running', '⏳ calling ' + step.agent + '…');
+      const t0 = Date.now();
+      const out = await callAgent(step.agent, step.args());
+      const dt = Math.round((Date.now() - t0) / 1000);
+      STATE.vars[step.out] = out;
+      setStepStatus(step.id, 'done', `✓ ${dt}s · ${out.length} chars`);
+      setStepOutput(step.id, out);
+    }
+    const totalSec = Math.round((Date.now() - overallStart) / 1000);
+    btn.textContent = `✓ Done in ${totalSec}s`;
+    // Show the final chapter prominently
+    $('#final-content').textContent = STATE.vars.final || '(no chapter)';
+    $('#final').classList.add('show');
+    $('#final').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    toast(`✓ Book factory complete in ${totalSec}s`, 'ok');
+  } catch (e) {
+    // Find the running step and mark error
+    const running = STEPS.find(s => $('#step-' + s.id).classList.contains('running'));
+    if (running) {
+      setStepStatus(running.id, 'error', '✗ ' + e.message);
+      setStepOutput(running.id, e.message);
+    }
+    btn.textContent = '▶ Run book factory';
+    btn.disabled = false;
+    toast('Run failed: ' + e.message, 'bad');
+  }
+}
+$('#run-btn').addEventListener('click', run);
+
+// ─── Boot ────────────────────────────────────────────────────────────
+
+renderTimeline();
+probeHealth();
+setInterval(probeHealth, 8000);
+</script>
+
+</body>
+</html>

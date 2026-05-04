@@ -1,0 +1,1548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAPP Brainstem — Your Agents</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:       #0b0e14;
+    --bg-soft:  #13172080;
+    --panel:    #161b26;
+    --panel-2:  #1d2330;
+    --panel-3:  #242a39;
+    --border:   #2a3040;
+    --border-strong: #39405a;
+    --fg:       #e8ecf4;
+    --muted:    #8b93a7;
+    --accent:   #7aa2ff;
+    --accent-2: #a78bfa;
+    --good:     #52d37c;
+    --warn:     #f0c96b;
+    --bad:      #f97a85;
+    --radius:   10px;
+    --radius-lg: 14px;
+    --shadow-soft: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.15);
+    --shadow:      0 4px 12px rgba(0,0,0,0.4);
+  }
+  html, body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif;
+    background: radial-gradient(ellipse at top left, #1a1028 0%, var(--bg) 45%) fixed;
+    color: var(--fg);
+    min-height: 100vh;
+  }
+  body { display: grid; grid-template-rows: 64px 1fr; }
+
+  /* ── Header ─────────────────────────────────────────────── */
+  header {
+    background: linear-gradient(180deg, rgba(22,27,38,0.9), rgba(22,27,38,0.6));
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 28px;
+    gap: 16px;
+    position: sticky; top: 0; z-index: 50;
+  }
+  header .brand {
+    font-size: 15px; font-weight: 600;
+    display: flex; align-items: center; gap: 10px;
+    color: var(--fg);
+  }
+  header .brand .logo {
+    width: 28px; height: 28px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    border-radius: 8px;
+    display: grid; place-items: center;
+    font-size: 16px;
+  }
+  header .spacer { flex: 1; }
+  header a.back {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 13px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    transition: background 0.15s;
+  }
+  header a.back:hover { background: var(--panel-2); color: var(--fg); }
+  .tabs {
+    display: flex; gap: 2px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 3px;
+  }
+  .tabs button {
+    background: transparent;
+    border: 0;
+    color: var(--muted);
+    padding: 7px 16px;
+    border-radius: 7px;
+    font-size: 13px; font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .tabs button:hover { color: var(--fg); }
+  .tabs button.active {
+    background: var(--panel-3);
+    color: var(--fg);
+    box-shadow: var(--shadow-soft);
+  }
+
+  /* ── Layout ─────────────────────────────────────────────── */
+  main {
+    padding: 32px 28px 60px;
+    overflow: auto;
+    max-width: 1100px;
+    width: 100%;
+    margin: 0 auto;
+  }
+  .pane { display: none; animation: fadein 0.2s ease; }
+  .pane.active { display: block; }
+  @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  /* ── Hero / greeting ────────────────────────────────────── */
+  .hero {
+    background:
+      linear-gradient(135deg, rgba(122,162,255,0.08), rgba(167,139,250,0.06)),
+      var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 22px 28px;
+    margin-bottom: 24px;
+    display: flex; align-items: center; gap: 24px;
+  }
+  .hero .hero-icon {
+    width: 56px; height: 56px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    border-radius: 14px;
+    display: grid; place-items: center;
+    font-size: 28px;
+    flex-shrink: 0;
+  }
+  .hero h2 { font-size: 18px; margin-bottom: 4px; }
+  .hero p  { color: var(--muted); font-size: 13px; line-height: 1.5; }
+
+  /* ── Toolbar ────────────────────────────────────────────── */
+  .toolbar {
+    display: flex; gap: 10px;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .toolbar .spacer { flex: 1; }
+  .btn {
+    background: var(--panel-2);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    padding: 9px 14px;
+    border-radius: 8px;
+    font-size: 13px; font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .btn:hover { background: var(--panel-3); border-color: var(--border-strong); }
+  .btn.primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    border-color: transparent;
+    color: #0a0d14;
+    font-weight: 600;
+  }
+  .btn.primary:hover { filter: brightness(1.1); }
+  .btn.ghost { background: transparent; }
+
+  /* Advanced switch */
+  .advanced-switch {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 12px;
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    user-select: none;
+    border-radius: 8px;
+  }
+  .advanced-switch:hover { color: var(--fg); }
+  .advanced-switch .sw {
+    width: 28px; height: 16px; border-radius: 9px;
+    background: var(--border);
+    position: relative;
+    transition: background 0.15s;
+  }
+  .advanced-switch .sw::after {
+    content: "";
+    position: absolute; top: 2px; left: 2px;
+    width: 12px; height: 12px;
+    background: #fff; border-radius: 50%;
+    transition: left 0.15s;
+  }
+  .advanced-switch.on .sw { background: var(--accent); }
+  .advanced-switch.on .sw::after { left: 14px; }
+
+  /* ── Tree ───────────────────────────────────────────────── */
+  .tree {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 10px;
+    min-height: 280px;
+  }
+  .empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--muted);
+  }
+  .empty-state .big-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.6; }
+  .empty-state p { font-size: 13px; line-height: 1.6; max-width: 420px; margin: 0 auto; }
+
+  /* ── Nodes ──────────────────────────────────────────────── */
+  .node-wrap { margin-bottom: 3px; }
+  .node {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 14px;
+    border-radius: 10px;
+    cursor: default;
+    transition: background 0.12s;
+  }
+  .node:hover { background: var(--panel-2); }
+  .node.selected { background: rgba(122,162,255,0.08); box-shadow: inset 0 0 0 1px rgba(122,162,255,0.25); }
+  .node.drop-target {
+    background: rgba(82,211,124,0.12);
+    box-shadow: inset 0 0 0 1px var(--good);
+  }
+  .node .toggle {
+    width: 14px; text-align: center;
+    color: var(--muted);
+    font-size: 10px;
+    transition: transform 0.15s;
+    user-select: none;
+  }
+  .node .toggle.expanded { transform: rotate(90deg); }
+  .node .toggle:empty { visibility: hidden; }
+
+  .node .icon {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    display: grid; place-items: center;
+    font-size: 16px;
+    background: var(--panel-3);
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .node.folder .icon {
+    background: linear-gradient(135deg, rgba(122,162,255,0.15), rgba(167,139,250,0.1));
+    border-color: rgba(122,162,255,0.3);
+  }
+  .node.folder.reserved-system .icon {
+    background: linear-gradient(135deg, rgba(82,211,124,0.2), rgba(82,211,124,0.08));
+    border-color: rgba(82,211,124,0.35);
+  }
+  .node.folder.reserved-experimental .icon {
+    background: linear-gradient(135deg, rgba(240,201,107,0.2), rgba(240,201,107,0.08));
+    border-color: rgba(240,201,107,0.35);
+  }
+  .node.folder.reserved-disabled .icon {
+    background: linear-gradient(135deg, rgba(249,122,133,0.2), rgba(249,122,133,0.08));
+    border-color: rgba(249,122,133,0.35);
+  }
+  .node.agent .icon {
+    background: var(--panel-3);
+    font-size: 14px;
+  }
+
+  .node .name {
+    flex: 1;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-size: 14px;
+  }
+  .node.folder .name { font-weight: 500; }
+  .node.folder .name .count {
+    color: var(--muted); font-size: 12px; font-weight: 400;
+    margin-left: 6px;
+  }
+
+  .badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--panel-3);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+  }
+  .badge.system       { background: rgba(82,211,124,0.1);  color: var(--good);   border-color: rgba(82,211,124,0.3); }
+  .badge.experimental { background: rgba(240,201,107,0.1); color: var(--warn);   border-color: rgba(240,201,107,0.3); }
+  .badge.disabled     { background: rgba(249,122,133,0.1); color: var(--bad);    border-color: rgba(249,122,133,0.3); }
+
+  /* Folder-group toggle */
+  .folder-switch {
+    position: relative;
+    width: 36px; height: 20px;
+    background: var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+  .folder-switch.on { background: var(--good); }
+  .folder-switch::after {
+    content: "";
+    position: absolute; top: 2px; left: 2px;
+    width: 16px; height: 16px;
+    background: #fff; border-radius: 50%;
+    transition: left 0.15s;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+  }
+  .folder-switch.on::after { left: 18px; }
+  .node.folder-off { opacity: 0.5; }
+  .node.folder-off .name { text-decoration: line-through; }
+
+  /* Children */
+  .children {
+    margin-left: 26px;
+    padding-left: 12px;
+    border-left: 1px solid var(--border);
+    margin-top: 2px;
+    overflow: hidden;
+    max-height: 5000px;
+    transition: max-height 0.2s ease;
+  }
+  .children.collapsed { max-height: 0; margin-top: 0; }
+
+  /* ── Modal ──────────────────────────────────────────────── */
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(4px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--panel);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    min-width: 480px;
+    max-width: 640px;
+    max-height: 82vh;
+    overflow: auto;
+    padding: 28px;
+    box-shadow: var(--shadow);
+  }
+  .modal h2 { font-size: 18px; margin-bottom: 8px; }
+  .modal .subtitle { color: var(--muted); font-size: 13px; line-height: 1.5; margin-bottom: 18px; }
+  .modal label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; margin-top: 14px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+  .modal input[type="text"], .modal textarea, .modal select {
+    width: 100%;
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  .modal input:focus, .modal textarea:focus { outline: 0; border-color: var(--accent); }
+  .modal textarea { min-height: 180px; font-family: ui-monospace, "SF Mono", monospace; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; }
+
+  .template-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 8px 0;
+  }
+  .template-card {
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    border-radius: 10px;
+    padding: 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .template-card:hover { border-color: var(--border-strong); background: var(--panel-3); }
+  .template-card.selected {
+    border-color: var(--accent);
+    background: rgba(122,162,255,0.08);
+    box-shadow: 0 0 0 1px rgba(122,162,255,0.2);
+  }
+  .template-card .tc-icon { font-size: 26px; margin-bottom: 8px; }
+  .template-card .tc-name { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+  .template-card .tc-desc { font-size: 11.5px; color: var(--muted); line-height: 1.4; }
+
+  /* ── Persona / Settings panes ──────────────────────────── */
+  .section-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px 26px;
+    margin-bottom: 18px;
+  }
+  .section-card h3 {
+    font-size: 14px;
+    margin-bottom: 4px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .section-card h3 .sec-icon {
+    width: 26px; height: 26px; border-radius: 7px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: grid; place-items: center;
+    font-size: 14px;
+  }
+  .section-card p { font-size: 12.5px; color: var(--muted); line-height: 1.5; margin-bottom: 14px; }
+  .section-card .field { margin-bottom: 12px; }
+  .section-card .field label { display: block; font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600; }
+  .section-card .field input, .section-card .field textarea {
+    width: 100%;
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 11px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  .section-card .field input:focus, .section-card .field textarea:focus { outline: 0; border-color: var(--accent); }
+  .persona-textarea { min-height: 340px; font-family: ui-monospace, "SF Mono", monospace; white-space: pre; }
+
+  /* Beginner-friendly toggle row + connection chips */
+  .toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 14px;
+    padding: 12px 14px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 10px;
+  }
+  .toggle-row:last-child { margin-bottom: 0; }
+  .toggle-title { font-size: 13.5px; font-weight: 500; margin-bottom: 3px; }
+  .toggle-desc  { font-size: 12px; color: var(--muted); }
+
+  .conn-chip {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 14px;
+    padding: 10px 14px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 8px;
+  }
+  .conn-chip .conn-label { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
+  .conn-chip .conn-label .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+  .conn-chip.connected .dot { background: var(--good); box-shadow: 0 0 6px rgba(82,211,124,0.5); }
+  .conn-chip .status { font-size: 12px; color: var(--muted); }
+  .conn-chip.connected .status { color: var(--good); }
+
+  /* ── Agent detail card (sidebar) ────────────────────────── */
+  .workspace {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 18px;
+  }
+  @media (max-width: 880px) { .workspace { grid-template-columns: 1fr; } }
+  .detail-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 22px;
+    position: sticky;
+    top: 88px;
+    align-self: start;
+    max-height: calc(100vh - 110px);
+    overflow: auto;
+  }
+  .detail-card .dc-empty { text-align: center; color: var(--muted); padding: 24px 10px; font-size: 13px; line-height: 1.5; }
+  .detail-card .dc-empty .big-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.5; }
+  .detail-card .dc-icon {
+    width: 56px; height: 56px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: grid; place-items: center;
+    font-size: 26px;
+    margin-bottom: 14px;
+  }
+  .detail-card h4 { font-size: 16px; margin-bottom: 4px; }
+  .detail-card .dc-filename { font-size: 11px; color: var(--muted); font-family: ui-monospace, monospace; margin-bottom: 14px; }
+  .detail-card .dc-description { font-size: 13px; line-height: 1.55; color: var(--fg); margin-bottom: 14px; }
+  .detail-card .dc-section { margin-bottom: 12px; }
+  .detail-card .dc-label { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; font-weight: 600; }
+  .detail-card .dc-param {
+    font-size: 12px;
+    padding: 7px 10px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    margin-bottom: 6px;
+  }
+  .detail-card .dc-param b { color: var(--accent); font-family: ui-monospace, monospace; font-weight: 600; font-size: 11.5px; }
+  .detail-card .dc-param .pt { color: var(--muted); font-size: 10.5px; margin-left: 6px; }
+  .detail-card .dc-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+  .detail-card .dc-tag {
+    font-size: 10.5px;
+    padding: 2px 9px;
+    border-radius: 10px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .detail-card .dc-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 16px; }
+  .detail-card .dc-btn {
+    flex: 1; min-width: fit-content;
+    background: var(--panel-2);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    padding: 7px 10px;
+    border-radius: 7px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .detail-card .dc-btn:hover { background: var(--panel-3); }
+  .detail-card .dc-btn.danger { color: var(--bad); }
+
+  /* Advanced-mode select styling matches text inputs */
+  .adv-select, select {
+    width: 100%;
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 11px;
+    font-size: 13px;
+    font-family: inherit;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' stroke='%238b93a7' stroke-width='1.3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+  }
+  .adv-select:focus, select:focus { outline: 0; border-color: var(--accent); }
+
+  .secret-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11.5px; font-weight: 500;
+    padding: 5px 10px;
+    border-radius: 12px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    margin-right: 6px;
+    margin-bottom: 6px;
+  }
+  .secret-chip.set   { color: var(--good);  border-color: rgba(82,211,124,0.3);  background: rgba(82,211,124,0.08); }
+  .secret-chip .dot  { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+
+  /* ── Toast ──────────────────────────────────────────────── */
+  .toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--panel);
+    border: 1px solid var(--border-strong);
+    padding: 12px 18px;
+    border-radius: 10px;
+    font-size: 13px;
+    opacity: 0; transform: translateY(10px);
+    transition: all 0.2s;
+    z-index: 200;
+    box-shadow: var(--shadow);
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.good { border-color: var(--good); }
+  .toast.bad  { border-color: var(--bad); }
+
+  /* ── Context menu ───────────────────────────────────────── */
+  .ctx-menu {
+    position: fixed;
+    background: var(--panel);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    padding: 4px;
+    z-index: 150;
+    box-shadow: var(--shadow);
+    min-width: 180px;
+  }
+  .ctx-menu .item {
+    padding: 7px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    border-radius: 6px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .ctx-menu .item:hover { background: var(--panel-2); }
+  .ctx-menu .item.danger { color: var(--bad); }
+  .ctx-menu .sep { height: 1px; background: var(--border); margin: 4px 6px; }
+
+  .muted { color: var(--muted); font-size: 12px; }
+  .subtle-help { color: var(--muted); font-size: 12px; margin-top: 14px; line-height: 1.5; }
+  .kbd {
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    padding: 1px 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--panel-2);
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo">🧠</div>
+    <span>RAPP Brainstem</span>
+  </div>
+  <div class="spacer"></div>
+  <div class="tabs">
+    <button data-tab="agents"  class="active">Agents</button>
+    <button data-tab="settings">Settings</button>
+  </div>
+  <div class="spacer"></div>
+  <a class="back" href="/">← Chat</a>
+</header>
+
+<main>
+  <!-- ── Agents ────────────────────────────────────────── -->
+  <section id="pane-agents" class="pane active">
+    <div class="hero">
+      <div class="hero-icon">✨</div>
+      <div>
+        <h2>Your agents</h2>
+        <p>Organize your agents into folders however you want. Drop a folder in, drag things between folders, toggle whole groups on and off. The brainstem auto-discovers everything inside.</p>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <button class="btn primary" id="btn-new-agent">＋ New agent</button>
+      <button class="btn" id="btn-new-folder">📁 New folder</button>
+      <button class="btn ghost" id="btn-refresh">↻ Refresh</button>
+      <div class="spacer"></div>
+      <div class="advanced-switch" id="advanced-switch" title="Show system, experimental, and disabled folders">
+        <span>Advanced</span>
+        <span class="sw"></span>
+      </div>
+      <button class="btn ghost" id="btn-vscode" title="Open the agents folder in VS Code">
+        <span>⚙</span> VS Code
+      </button>
+    </div>
+
+    <div class="workspace">
+      <div class="tree" id="tree"></div>
+      <aside class="detail-card" id="detail-card">
+        <div class="dc-empty">
+          <div class="big-icon">👉</div>
+          <p>Click an agent to see what it does.</p>
+        </div>
+      </aside>
+    </div>
+
+    <p class="subtle-help">
+      <span class="kbd">click</span> an agent to see details. <span class="kbd">drag</span> to move between folders. <span class="kbd">right-click</span> for rename, disable, delete. Toggle a folder to silence every agent inside without deleting anything.
+    </p>
+  </section>
+
+  <!-- ── Settings ──────────────────────────────────────── -->
+  <section id="pane-settings" class="pane">
+
+    <!-- Beginner-friendly settings (shown when Advanced is off) -->
+    <div id="settings-simple">
+      <div class="section-card">
+        <h3><span class="sec-icon">🧠</span> Which model?</h3>
+        <p>Pick the AI model your brainstem should talk to. Defaults to GPT-4o through GitHub Copilot — no setup needed beyond a GitHub account.</p>
+        <div class="field">
+          <label>Model</label>
+          <select id="simple-model" data-env="GITHUB_MODEL" style="width:100%;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;">
+            <option value="gpt-4o">GPT-4o (recommended)</option>
+            <option value="gpt-4.1">GPT-4.1</option>
+            <option value="gpt-4o-mini">GPT-4o Mini (faster, cheaper)</option>
+            <option value="claude-sonnet-4">Claude Sonnet 4</option>
+            <option value="gpt-4">GPT-4</option>
+            <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <h3><span class="sec-icon">🎙</span> Extras</h3>
+        <p>Turn features on and off.</p>
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-title">Voice responses</div>
+            <div class="toggle-desc">Speak replies out loud with text-to-speech.</div>
+          </div>
+          <div class="folder-switch" id="simple-voice" data-env-bool="VOICE_MODE"></div>
+        </div>
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-title">Digital Twin panel</div>
+            <div class="toggle-desc">A side panel where the twin comments on each turn.</div>
+          </div>
+          <div class="folder-switch" id="simple-twin" data-env-bool="TWIN_MODE"></div>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <h3><span class="sec-icon">🔌</span> Connections</h3>
+        <p>Services your brainstem is linked to. Connect or disconnect in <b>Advanced</b>.</p>
+        <div id="simple-connections"></div>
+      </div>
+    </div>
+
+    <!-- Advanced raw .env editor (shown when Advanced is on) -->
+    <div id="settings-advanced" style="display:none;">
+      <div class="section-card">
+        <h3><span class="sec-icon">⚙</span> Environment</h3>
+        <p>Raw <code>.env</code> values. Only whitelisted keys save; unknown keys are silently dropped.</p>
+        <div class="field">
+          <label>GITHUB_MODEL</label>
+          <select data-env="GITHUB_MODEL" class="adv-select">
+            <option value="gpt-4o">gpt-4o</option>
+            <option value="gpt-4.1">gpt-4.1</option>
+            <option value="gpt-4o-mini">gpt-4o-mini</option>
+            <option value="claude-sonnet-4">claude-sonnet-4</option>
+            <option value="gpt-4">gpt-4</option>
+            <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>PORT</label>
+          <input type="text" data-env="PORT" placeholder="7071">
+        </div>
+        <div class="field">
+          <label>VOICE_MODE</label>
+          <select data-env="VOICE_MODE" class="adv-select">
+            <option value="true">true</option>
+            <option value="false">false</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>TWIN_MODE</label>
+          <select data-env="TWIN_MODE" class="adv-select">
+            <option value="true">true</option>
+            <option value="false">false</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>AZURE_OPENAI_ENDPOINT</label>
+          <input type="text" data-env="AZURE_OPENAI_ENDPOINT" placeholder="https://...openai.azure.com/">
+        </div>
+        <div class="field">
+          <label>AZURE_OPENAI_DEPLOYMENT</label>
+          <input type="text" data-env="AZURE_OPENAI_DEPLOYMENT">
+        </div>
+      </div>
+
+      <div class="section-card">
+        <h3><span class="sec-icon">🔐</span> Secrets</h3>
+        <p>Presence-only — the UI never reads secret values back. Rotate by editing <code>.env</code> directly.</p>
+        <div id="secrets-row" style="margin-bottom:12px;"></div>
+      </div>
+    </div>
+
+    <div style="display:flex; gap:10px; margin-top:8px;">
+      <button class="btn primary" id="btn-save-env">Save settings</button>
+      <button class="btn ghost" id="btn-reload-env">Reload</button>
+    </div>
+  </section>
+</main>
+
+<div class="modal-backdrop" id="modal-backdrop">
+  <div class="modal" id="modal"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ═════════════════════════════════════════════════════════════════
+ * RAPP Brainstem Manager — vanilla JS, no deps.
+ * Every UI action is a filesystem operation on agents/ (Article XVIII).
+ * ═════════════════════════════════════════════════════════════════ */
+
+const $  = (sel, root=document) => root.querySelector(sel);
+const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+const RESERVED_NAMES = new Set(["system_agents", "experimental_agents", "disabled_agents"]);
+const RESERVED_PRETTY = {
+  "system_agents":       { label: "System tools",   icon: "🛠", cls: "reserved-system" },
+  "experimental_agents": { label: "Experimental",   icon: "🧪", cls: "reserved-experimental" },
+  "disabled_agents":     { label: "Disabled",       icon: "⏸",  cls: "reserved-disabled" },
+};
+
+/* Pretty-print a filesystem name for non-advanced view:
+ *   save_memory_agent.py  →  "Save Memory"
+ *   hacker_news_agent.py  →  "Hacker News"
+ *   my_stack              →  "My Stack"
+ *   q4-prospects          →  "Q4 Prospects"
+ * Keeps words separated by _ / -, strips _agent.py and trailing .py,
+ * Title-cases each word. Acronyms (2-3 chars all letters) stay upper.
+ */
+function prettyName(raw) {
+  if (!raw) return "";
+  let s = raw.replace(/_agent\.py$/i, "").replace(/\.py$/i, "");
+  if (/[_\-\.]/.test(s)) {
+    // snake_case / kebab-case → title-cased words
+    return s.split(/[_\-\.]/).filter(Boolean).map(w =>
+      w.charAt(0).toUpperCase() + w.slice(1)
+    ).join(" ");
+  }
+  // CamelCase / PascalCase → "Camel Case" (acronym runs preserved: HTTPResponder → HTTP Responder)
+  return s.replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+          .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
+}
+
+// ── Toast ──────────────────────────────────────────────────────
+let _toastTimer = null;
+function toast(msg, kind="good") {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.className = `toast show ${kind}`;
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => t.className = "toast", 2400);
+}
+
+// ── API helpers ────────────────────────────────────────────────
+async function api(path, opts={}) {
+  const r = await fetch(path, {
+    headers: opts.body ? {"Content-Type": "application/json"} : undefined,
+    ...opts,
+  });
+  if (!r.ok) {
+    let msg = `${r.status} ${r.statusText}`;
+    try { const j = await r.json(); if (j.error) msg = j.error; } catch {}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+
+// ── Tabs ───────────────────────────────────────────────────────
+$$(".tabs button").forEach(b => b.addEventListener("click", () => {
+  $$(".tabs button").forEach(x => x.classList.toggle("active", x === b));
+  $$(".pane").forEach(p => p.classList.toggle("active", p.id === `pane-${b.dataset.tab}`));
+  if (b.dataset.tab === "settings") loadConfig();
+}));
+
+// ── Tree state ─────────────────────────────────────────────────
+let _tree = null;
+let _selected = null;
+let _showAdvanced = false;
+// Expanded paths — opt-in. Default: all folders start collapsed.
+let _expanded = new Set();
+// First load: auto-expand nothing; user clicks to drill in.
+let _firstLoad = true;
+
+// ── Advanced toggle ────────────────────────────────────────────
+// Flipping "Advanced" does two things:
+//   • Agents tab: show reserved folders + raw filenames (save_memory_agent.py)
+//     instead of pretty names (Save Memory).
+//   • Settings tab: show raw .env editor with select/text for every key,
+//     instead of the beginner-friendly dropdown + toggles + connection
+//     chips. Constitution Article XX — beginner default, advanced opt-in.
+const advSwitch = $("#advanced-switch");
+advSwitch.addEventListener("click", () => {
+  _showAdvanced = !_showAdvanced;
+  advSwitch.classList.toggle("on", _showAdvanced);
+  renderTree();
+  applySettingsMode();
+});
+
+function applySettingsMode() {
+  const simple   = $("#settings-simple");
+  const advanced = $("#settings-advanced");
+  if (!simple || !advanced) return;
+  if (_showAdvanced) {
+    simple.style.display   = "none";
+    advanced.style.display = "";
+  } else {
+    simple.style.display   = "";
+    advanced.style.display = "none";
+  }
+}
+
+// ── Tree rendering ─────────────────────────────────────────────
+async function loadTree() {
+  try {
+    _tree = await api("/api/agents/tree");
+    renderTree();
+    _firstLoad = false;
+    // If the current selection still exists and is an agent, refresh detail.
+    // Otherwise show empty state.
+    if (_selected) {
+      const node = currentNode(_selected);
+      if (node && node.kind === "agent") loadAgentDetail(node);
+      else renderDetailEmpty();
+    } else {
+      renderDetailEmpty();
+    }
+  } catch (e) {
+    toast("couldn't load tree: " + e.message, "bad");
+  }
+}
+
+function countAgents(node) {
+  if (!node) return 0;
+  if (node.kind === "agent") return 1;
+  let c = 0;
+  for (const ch of node.children || []) c += countAgents(ch);
+  return c;
+}
+
+function renderTree() {
+  const root = $("#tree");
+  root.innerHTML = "";
+
+  if (!_tree) return;
+
+  // Top-level children, filtered by advanced mode.
+  const visible = (_tree.children || []).filter(c => {
+    if (!_showAdvanced && c.reserved) return false;
+    return true;
+  });
+
+  if (visible.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.innerHTML = `
+      <div class="big-icon">📂</div>
+      <p>Your workspace is empty.<br>
+      Click <b>＋ New agent</b> to spawn one from a template, or <b>📁 New folder</b> to start grouping.</p>`;
+    root.appendChild(empty);
+    return;
+  }
+
+  for (const c of visible) root.appendChild(renderNode(c, 1));
+
+  // Restore selection highlight
+  if (_selected) {
+    const sel = root.querySelector(`.node[data-path="${CSS.escape(_selected)}"]`);
+    if (sel) sel.classList.add("selected");
+  }
+}
+
+function renderNode(node, depth) {
+  const wrap = document.createElement("div");
+  wrap.className = "node-wrap";
+
+  const row = document.createElement("div");
+  row.className = `node ${node.kind}`;
+  row.dataset.path = node.path || "";
+  row.dataset.kind = node.kind;
+
+  if (node.reserved) row.classList.add(RESERVED_PRETTY[node.reserved].cls);
+  if (node.folder_disabled) row.classList.add("folder-off");
+
+  // Toggle chevron
+  const toggle = document.createElement("span");
+  toggle.className = "toggle";
+  const hasChildren = node.kind === "folder" && node.children && node.children.length;
+  const expanded = _expanded.has(node.path);
+  if (hasChildren) {
+    toggle.textContent = "▸";
+    if (expanded) toggle.classList.add("expanded");
+  }
+  row.appendChild(toggle);
+
+  // Icon
+  const icon = document.createElement("span");
+  icon.className = "icon";
+  if (node.kind === "folder") {
+    if (node.reserved) icon.textContent = RESERVED_PRETTY[node.reserved].icon;
+    else               icon.textContent = expanded ? "📂" : "📁";
+  } else {
+    icon.textContent = node.status === "disabled"     ? "⏸"
+                     : node.status === "experimental" ? "🧪"
+                     : node.kind === "other"          ? "📄"
+                     : "⚙";
+  }
+  row.appendChild(icon);
+
+  // Name + count
+  const name = document.createElement("span");
+  name.className = "name";
+  let displayName;
+  if (node.reserved) {
+    // Reserved folders keep their friendly label regardless of advanced mode,
+    // but advanced mode appends the raw dirname so power users know the path.
+    displayName = RESERVED_PRETTY[node.reserved].label;
+    if (_showAdvanced) displayName += `  ${node.reserved}/`;
+  } else if (_showAdvanced) {
+    displayName = node.name;            // raw: save_memory_agent.py, my_stack
+  } else {
+    displayName = prettyName(node.name); // "Save Memory", "My Stack"
+  }
+  name.textContent = displayName;
+  if (node.kind === "folder") {
+    const n = countAgents(node);
+    if (n) {
+      const c = document.createElement("span");
+      c.className = "count";
+      c.textContent = `· ${n} agent${n === 1 ? "" : "s"}`;
+      name.appendChild(c);
+    }
+  }
+  row.appendChild(name);
+
+  // Badges
+  if (node.system && !node.reserved)          appendBadge(row, "system",       "system");
+  if (node.status === "experimental")         appendBadge(row, "experimental", "experimental");
+  if (node.status === "disabled")             appendBadge(row, "disabled",     "disabled");
+
+  // Folder-group toggle (non-reserved folders only)
+  if (node.kind === "folder" && !node.reserved) {
+    const isOn = !node.folder_disabled;
+    const sw = document.createElement("div");
+    sw.className = "folder-switch" + (isOn ? " on" : "");
+    sw.title = isOn
+      ? "Folder enabled — click to pause every agent inside"
+      : "Folder paused — click to re-enable";
+    sw.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      try {
+        await api("/api/agents/folder-toggle", { method: "POST",
+          body: JSON.stringify({ path: node.path, enabled: !isOn }) });
+        toast(isOn ? `paused ${node.name}` : `enabled ${node.name}`);
+        await loadTree();
+      } catch (err) { toast(err.message, "bad"); }
+    });
+    row.appendChild(sw);
+  }
+
+  // Interactions
+  row.addEventListener("click", (e) => {
+    _selected = node.path || "";
+    $$(".node").forEach(n => n.classList.toggle("selected", n === row));
+    if (node.kind === "agent") {
+      // Show details for agents — so beginners understand what the
+      // thing does without reading code.
+      loadAgentDetail(node);
+    } else if (hasChildren) {
+      // Folders: expand/collapse on click.
+      if (_expanded.has(node.path)) _expanded.delete(node.path);
+      else _expanded.add(node.path);
+      renderTree();
+      renderDetailEmpty();
+    } else {
+      renderDetailEmpty();
+    }
+  });
+  row.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    _selected = node.path || "";
+    showNodeMenu(e, node);
+  });
+
+  // Drag & drop
+  if (node.kind === "agent") {
+    row.draggable = true;
+    row.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData("text/path", node.path);
+      e.dataTransfer.effectAllowed = "move";
+    });
+  }
+  if (node.kind === "folder") {
+    row.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      row.classList.add("drop-target");
+    });
+    row.addEventListener("dragleave", () => row.classList.remove("drop-target"));
+    row.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      row.classList.remove("drop-target");
+      const from = e.dataTransfer.getData("text/path");
+      if (!from) return;
+      const base = from.split("/").pop();
+      const targetFolder = node.path || "";
+      const to = targetFolder ? `${targetFolder}/${base}` : base;
+      if (from === to) return;
+      try {
+        await api("/api/agents/move", { method: "POST",
+          body: JSON.stringify({ from_path: from, to_path: to }) });
+        toast(`moved → ${to}`);
+        await loadTree();
+      } catch (err) { toast(err.message, "bad"); }
+    });
+  }
+
+  wrap.appendChild(row);
+
+  // Children
+  if (hasChildren) {
+    const children = document.createElement("div");
+    children.className = "children" + (expanded ? "" : " collapsed");
+    for (const c of node.children) children.appendChild(renderNode(c, depth + 1));
+    wrap.appendChild(children);
+  }
+  return wrap;
+}
+
+function appendBadge(row, text, cls) {
+  const b = document.createElement("span");
+  b.className = `badge ${cls}`;
+  b.textContent = text;
+  row.appendChild(b);
+}
+
+// ── Agent detail card ──────────────────────────────────────────
+function renderDetailEmpty() {
+  const card = $("#detail-card");
+  card.innerHTML = `
+    <div class="dc-empty">
+      <div class="big-icon">👉</div>
+      <p>Click an agent to see what it does.</p>
+    </div>`;
+}
+
+function escapeHtml(s) {
+  return String(s || "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+async function loadAgentDetail(node) {
+  const card = $("#detail-card");
+  card.innerHTML = `<div class="dc-empty"><div class="big-icon">⏳</div><p>Loading…</p></div>`;
+  let detail;
+  try {
+    detail = await api("/api/agents/detail", { method: "POST", body: JSON.stringify({ path: node.path }) });
+  } catch (e) {
+    card.innerHTML = `<div class="dc-empty"><div class="big-icon">⚠</div><p>Couldn't load: ${escapeHtml(e.message)}</p></div>`;
+    return;
+  }
+
+  const pretty = prettyName(node.name);
+  const statusChip = node.status === "experimental" ? `<span class="badge experimental">experimental</span>`
+                   : node.status === "disabled"     ? `<span class="badge disabled">disabled</span>`
+                   : "";
+  const manifest = detail.manifest || {};
+  const tags = manifest.tags || [];
+  const version = manifest.version || "";
+  const author = manifest.author || "";
+  const props = (detail.parameters && detail.parameters.properties) || {};
+  const required = new Set(detail.parameters && detail.parameters.required || []);
+
+  let html = `
+    <div class="dc-icon">⚙</div>
+    <h4>${escapeHtml(pretty)} ${statusChip}</h4>
+    <div class="dc-filename">${escapeHtml(detail.filename)}${version ? ` · v${escapeHtml(version)}` : ""}</div>`;
+
+  if (detail.description) {
+    html += `<div class="dc-description">${escapeHtml(detail.description)}</div>`;
+  } else {
+    html += `<div class="dc-description muted">This agent didn't ship with a description.</div>`;
+  }
+
+  // Parameters
+  if (Object.keys(props).length) {
+    html += `<div class="dc-section"><div class="dc-label">What to give it</div>`;
+    for (const [k, p] of Object.entries(props)) {
+      const t = p.type || "any";
+      const desc = p.description ? ` — ${escapeHtml(p.description)}` : "";
+      const req = required.has(k) ? " <span style='color:var(--bad)'>required</span>" : "";
+      html += `<div class="dc-param"><b>${escapeHtml(k)}</b><span class="pt">${escapeHtml(t)}</span>${req}${desc}</div>`;
+    }
+    html += `</div>`;
+  }
+
+  // Tags
+  if (tags.length) {
+    html += `<div class="dc-section"><div class="dc-label">Tags</div><div class="dc-tags">`;
+    for (const t of tags) html += `<span class="dc-tag">${escapeHtml(t)}</span>`;
+    html += `</div></div>`;
+  }
+
+  // Author
+  if (author) html += `<div class="dc-section"><div class="dc-label">Author</div><div style="font-size:12px">${escapeHtml(author)}</div></div>`;
+
+  // Actions
+  html += `
+    <div class="dc-actions">
+      <button class="dc-btn" data-act="vscode">Open in VS Code</button>
+      <button class="dc-btn" data-act="rename">Rename</button>
+      <button class="dc-btn" data-act="${node.status === 'disabled' ? 'enable' : 'disable'}">${node.status === 'disabled' ? 'Enable' : 'Disable'}</button>
+      <button class="dc-btn danger" data-act="delete">Delete</button>
+    </div>`;
+
+  card.innerHTML = html;
+
+  // Wire action buttons
+  $$(".dc-btn", card).forEach(b => b.addEventListener("click", async () => {
+    const act = b.dataset.act;
+    if (act === "vscode") return openInVSCode(node.path);
+    if (act === "rename") return renamePrompt(node);
+    if (act === "disable") return disableAgent(node);
+    if (act === "enable")  return enableAgent(node);
+    if (act === "delete")  return deleteNode(node);
+  }));
+}
+
+// ── Context menu ───────────────────────────────────────────────
+function showNodeMenu(event, node) {
+  closeCtxMenu();
+  const actions = [];
+  if (node.kind === "agent") {
+    actions.push({ icon: "✏", label: "Rename…", fn: () => renamePrompt(node) });
+    if (node.status !== "disabled") actions.push({ icon: "⏸", label: "Disable", fn: () => disableAgent(node) });
+    else                            actions.push({ icon: "▶", label: "Enable",  fn: () => enableAgent(node) });
+    actions.push({ sep: true });
+    actions.push({ icon: "🗑", label: "Delete",  fn: () => deleteNode(node), danger: true });
+  } else if (node.kind === "folder" && !node.reserved) {
+    actions.push({ icon: "✏", label: "Rename…", fn: () => renamePrompt(node) });
+    actions.push({ sep: true });
+    actions.push({ icon: "🗑", label: "Delete (if empty)", fn: () => deleteNode(node), danger: true });
+  }
+  actions.push({ icon: "⚙", label: "Open in VS Code", fn: () => openInVSCode(node.path) });
+  if (!actions.length) return;
+
+  const menu = document.createElement("div");
+  menu.className = "ctx-menu";
+  menu.style.top  = event.clientY + "px";
+  menu.style.left = event.clientX + "px";
+  for (const a of actions) {
+    if (a.sep) { const s = document.createElement("div"); s.className = "sep"; menu.appendChild(s); continue; }
+    const it = document.createElement("div");
+    it.className = "item" + (a.danger ? " danger" : "");
+    it.innerHTML = `<span style="width:18px;text-align:center">${a.icon || ""}</span><span>${a.label}</span>`;
+    it.addEventListener("click", () => { closeCtxMenu(); a.fn(); });
+    menu.appendChild(it);
+  }
+  menu.id = "ctx-menu-active";
+  document.body.appendChild(menu);
+  setTimeout(() => document.addEventListener("click", closeCtxMenu, { once: true }), 10);
+}
+function closeCtxMenu() {
+  const m = $("#ctx-menu-active");
+  if (m) m.remove();
+}
+
+async function renamePrompt(node) {
+  const current = node.name;
+  const fresh = await inputModal({
+    title: "Rename",
+    subtitle: `Pick a new name for "${_showAdvanced ? current : prettyName(current)}".`,
+    label: "New name",
+    value: current,
+    okLabel: "Rename",
+  });
+  if (!fresh || fresh === current) return;
+  const dir = node.path.split("/").slice(0, -1).join("/");
+  const to = dir ? `${dir}/${fresh}` : fresh;
+  try {
+    await api("/api/agents/move", { method: "POST", body: JSON.stringify({ from_path: node.path, to_path: to }) });
+    toast("renamed");
+    await loadTree();
+  } catch (e) { toast(e.message, "bad"); }
+}
+
+async function disableAgent(node) {
+  const base = node.path.split("/").pop();
+  await moveAgent(node.path, `disabled_agents/${base}`, "disabled");
+}
+async function enableAgent(node) {
+  const base = node.path.split("/").pop();
+  await moveAgent(node.path, base, "enabled");
+}
+async function moveAgent(from, to, label) {
+  try {
+    await api("/api/agents/move", { method: "POST", body: JSON.stringify({ from_path: from, to_path: to }) });
+    toast(label);
+    await loadTree();
+  } catch (e) { toast(e.message, "bad"); }
+}
+
+async function deleteNode(node) {
+  if (!confirm(`Delete ${node.path}? This cannot be undone.`)) return;
+  try {
+    await api("/api/agents/delete", { method: "POST", body: JSON.stringify({ path: node.path }) });
+    toast("deleted");
+    await loadTree();
+  } catch (e) { toast(e.message, "bad"); }
+}
+
+async function openInVSCode(path) {
+  try {
+    await api("/api/agents/open-in-vscode", { method: "POST", body: JSON.stringify({ path: path || "" }) });
+    toast("opened in VS Code");
+  } catch (e) { toast(e.message, "bad"); }
+}
+
+// ── New folder / new agent ─────────────────────────────────────
+$("#btn-new-folder").addEventListener("click", async () => {
+  const parent = parentFolderPath();  // never an agent-file path
+  const parentLabel = parent ? `inside "${_showAdvanced ? parent : prettyName(parent.split("/").pop())}"` : "at the top level";
+  const name = await inputModal({
+    title: "New folder",
+    subtitle: `Create a new folder ${parentLabel}.`,
+    label: "Folder name",
+    placeholder: "e.g. sales stack",
+    okLabel: "Create",
+  });
+  if (!name) return;
+  const path = parent ? `${parent}/${name}` : name;
+  try {
+    await api("/api/agents/mkdir", { method: "POST", body: JSON.stringify({ path }) });
+    toast("folder created");
+    if (parent) _expanded.add(parent);
+    await loadTree();
+  } catch (e) { toast(e.message, "bad"); }
+});
+
+$("#btn-new-agent").addEventListener("click", openNewAgentModal);
+
+async function openNewAgentModal() {
+  let templates = [];
+  try { templates = (await api("/api/agents/templates")).templates; }
+  catch (e) { toast(e.message, "bad"); return; }
+
+  let selectedTpl = templates[0];
+  const modal = $("#modal");
+
+  // Parent folder (Windows-style): current folder if selected, else
+  // containing folder if an agent file is selected, else top-level.
+  const defaultFolder = parentFolderPath();
+
+  modal.innerHTML = `
+    <h2>New agent</h2>
+    <p class="subtitle">Pick a template and name it. We'll create the file under the folder you choose.</p>
+    <div class="template-grid" id="tpl-grid"></div>
+    <label>Agent name</label>
+    <input type="text" id="agent-name" value="${selectedTpl.default_name}">
+    <label>Folder</label>
+    <input type="text" id="agent-folder" value="${defaultFolder}" placeholder="(top level — leave blank)">
+    <div class="modal-actions">
+      <button class="btn ghost" data-close>Cancel</button>
+      <button class="btn primary" id="btn-create-agent">Create</button>
+    </div>`;
+
+  const grid = $("#tpl-grid", modal);
+  for (const t of templates) {
+    const card = document.createElement("div");
+    card.className = "template-card" + (t.id === selectedTpl.id ? " selected" : "");
+    card.dataset.id = t.id;
+    card.innerHTML = `<div class="tc-icon">${t.icon}</div><div class="tc-name">${t.name}</div><div class="tc-desc">${t.description}</div>`;
+    card.addEventListener("click", () => {
+      selectedTpl = t;
+      $$(".template-card", grid).forEach(c => c.classList.toggle("selected", c.dataset.id === t.id));
+      $("#agent-name", modal).value = t.default_name;
+    });
+    grid.appendChild(card);
+  }
+
+  $("#btn-create-agent", modal).addEventListener("click", async () => {
+    const name = $("#agent-name", modal).value.trim();
+    const folder = $("#agent-folder", modal).value.trim();
+    if (!name) { toast("name required", "bad"); return; }
+    try {
+      await api("/api/agents/new", { method: "POST",
+        body: JSON.stringify({ folder, agent_name: name, template_id: selectedTpl.id }) });
+      toast("agent created");
+      if (folder) _expanded.add(folder);
+      closeModal();
+      await loadTree();
+    } catch (e) { toast(e.message, "bad"); }
+  });
+  openModal();
+}
+
+function openModal()  { $("#modal-backdrop").classList.add("open"); }
+function closeModal() { $("#modal-backdrop").classList.remove("open"); }
+$("#modal-backdrop").addEventListener("click", (e) => {
+  if (e.target.id === "modal-backdrop") closeModal();
+  if (e.target.matches("[data-close]")) closeModal();
+});
+
+function currentNode(path) {
+  function walk(n) {
+    if ((n.path || "") === path) return n;
+    for (const c of n.children || []) { const r = walk(c); if (r) return r; }
+  }
+  return walk(_tree);
+}
+
+/* Windows-Explorer-style parent resolution: when "New Folder" or
+ * "New Agent" is triggered, the *parent folder* of the current
+ * selection is where the new thing is created. If the user selected
+ * an agent file, use its enclosing folder. If nothing is selected,
+ * use the top-level workspace. Never treat an agent file as a
+ * parent directory. */
+function parentFolderPath() {
+  if (!_selected) return "";
+  const node = currentNode(_selected);
+  if (!node) return "";
+  if (node.kind === "folder") return node.path;
+  // agent file: strip the filename to get the containing folder
+  const parts = _selected.split("/");
+  parts.pop();
+  return parts.join("/");
+}
+
+/* Nicer input modal to replace window.prompt() — matches the UI style,
+ * supports validation, Enter/Escape, auto-focus. */
+function inputModal({ title, subtitle, label, value = "", placeholder = "", okLabel = "OK" }) {
+  return new Promise((resolve) => {
+    const modal = $("#modal");
+    modal.innerHTML = `
+      <h2>${title}</h2>
+      ${subtitle ? `<p class="subtitle">${subtitle}</p>` : ""}
+      <label>${label}</label>
+      <input type="text" id="im-input" value="${value.replace(/"/g,"&quot;")}" placeholder="${placeholder}">
+      <div class="modal-actions">
+        <button class="btn ghost" data-close>Cancel</button>
+        <button class="btn primary" id="im-ok">${okLabel}</button>
+      </div>`;
+    openModal();
+    const input = $("#im-input", modal);
+    input.focus(); input.select();
+    const ok = () => {
+      const v = input.value.trim();
+      closeModal();
+      resolve(v || null);
+    };
+    $("#im-ok", modal).addEventListener("click", ok);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); ok(); }
+      if (e.key === "Escape") { closeModal(); resolve(null); }
+    });
+    $("#modal-backdrop").addEventListener("click", function onBG(e) {
+      if (e.target.id === "modal-backdrop" || e.target.matches("[data-close]")) {
+        $("#modal-backdrop").removeEventListener("click", onBG);
+        resolve(null);
+      }
+    });
+  });
+}
+
+$("#btn-refresh").addEventListener("click", loadTree);
+$("#btn-vscode").addEventListener("click", () => openInVSCode(""));
+
+// ── Config ─────────────────────────────────────────────────────
+async function loadConfig() {
+  try {
+    const cfg = await api("/api/config");
+    // Populate every element that declares data-env="KEY" — inputs
+    // (text), selects (bounded value), and data-env-bool toggles.
+    for (const [k, v] of Object.entries(cfg.env || {})) {
+      $$(`[data-env="${k}"]`).forEach(el => { el.value = v; });
+    }
+    // Bool toggles in the simple pane use the .folder-switch UI. "true" → on.
+    $$("[data-env-bool]").forEach(el => {
+      const k = el.dataset.envBool;
+      const v = String((cfg.env || {})[k] || "").toLowerCase() === "true";
+      el.classList.toggle("on", v);
+    });
+    // Secrets chips (advanced pane — raw names)
+    const row = $("#secrets-row");
+    if (row) {
+      row.innerHTML = "";
+      for (const [k, isSet] of Object.entries(cfg.secrets || {})) {
+        const chip = document.createElement("span");
+        chip.className = `secret-chip ${isSet ? 'set' : ''}`;
+        chip.innerHTML = `<span class="dot"></span> ${k}: ${isSet ? 'set' : 'unset'}`;
+        row.appendChild(chip);
+      }
+    }
+    // Simple-pane "Connections" chips — friendly names + status
+    renderConnections(cfg.secrets || {});
+  } catch (e) { toast(e.message, "bad"); }
+}
+
+const CONNECTION_PRETTY = {
+  GITHUB_TOKEN:         { name: "GitHub Copilot",  icon: "🧠" },
+  OPENAI_API_KEY:       { name: "OpenAI",          icon: "🎯" },
+  ANTHROPIC_API_KEY:    { name: "Anthropic Claude", icon: "🎭" },
+  AZURE_OPENAI_API_KEY: { name: "Azure OpenAI",    icon: "☁" },
+};
+
+function renderConnections(secrets) {
+  const box = $("#simple-connections");
+  if (!box) return;
+  box.innerHTML = "";
+  for (const [k, isSet] of Object.entries(secrets)) {
+    const meta = CONNECTION_PRETTY[k] || { name: k, icon: "🔗" };
+    const chip = document.createElement("div");
+    chip.className = "conn-chip" + (isSet ? " connected" : "");
+    chip.innerHTML = `
+      <span class="conn-label">
+        <span class="dot"></span>
+        <span style="font-size:16px">${meta.icon}</span>
+        <span>${meta.name}</span>
+      </span>
+      <span class="status">${isSet ? "Connected" : "Not connected"}</span>`;
+    box.appendChild(chip);
+  }
+  if (!Object.keys(secrets).length) {
+    box.innerHTML = '<p class="muted">No connections configured.</p>';
+  }
+}
+
+// Wire the simple-pane folder-style toggles (data-env-bool).
+document.addEventListener("click", (e) => {
+  const sw = e.target.closest("[data-env-bool]");
+  if (!sw) return;
+  sw.classList.toggle("on");
+});
+
+$("#btn-save-env").addEventListener("click", async () => {
+  const values = {};
+  // Text + select inputs that declare data-env="KEY"
+  $$("[data-env]").forEach(el => {
+    if (el.tagName === "INPUT" || el.tagName === "SELECT") {
+      values[el.dataset.env] = el.value;
+    }
+  });
+  // Bool toggles (.folder-switch[data-env-bool]) → "true" / "false"
+  $$("[data-env-bool]").forEach(el => {
+    values[el.dataset.envBool] = el.classList.contains("on") ? "true" : "false";
+  });
+  try {
+    await api("/api/config/env", { method: "POST", body: JSON.stringify({ values }) });
+    toast("settings saved");
+  } catch (e) { toast(e.message, "bad"); }
+});
+$("#btn-reload-env").addEventListener("click", loadConfig);
+
+// ── First-run wizard ───────────────────────────────────────────
+function maybeFirstRunWizard() {
+  if (!_tree) return;
+  const topFolders = (_tree.children || []).filter(c => c.kind === "folder" && !c.reserved);
+  const topAgents  = (_tree.children || []).filter(c => c.kind === "agent");
+  if (topFolders.length === 0 && topAgents.length <= 5) {
+    if (sessionStorage.getItem("rapp_wizard_shown")) return;
+    sessionStorage.setItem("rapp_wizard_shown", "1");
+    openFirstRunWizard();
+  }
+}
+
+function openFirstRunWizard() {
+  const modal = $("#modal");
+  modal.innerHTML = `
+    <h2>Welcome to your brainstem 👋</h2>
+    <p class="subtitle">This is your agent workspace. Everything you need to set up lives here.</p>
+    <div style="display:grid; gap:10px; margin:14px 0 6px;">
+      <div style="display:flex; gap:12px; align-items:flex-start;">
+        <div style="font-size:22px;">📂</div>
+        <div><b>Agents</b><div class="muted">Add, organize, and toggle agents. Drag between folders. Flip a folder switch to pause a whole group.</div></div>
+      </div>
+      <div style="display:flex; gap:12px; align-items:flex-start;">
+        <div style="font-size:22px;">⚙</div>
+        <div><b>Settings</b><div class="muted">Model choice, voice/twin toggles.</div></div>
+      </div>
+      <div style="display:flex; gap:12px; align-items:flex-start;">
+        <div style="font-size:22px;">🛠</div>
+        <div><b>Need to edit soul or code?</b><div class="muted">Hit <b>VS Code</b> — the brainstem opens your agents folder in your editor for anything deeper than folders.</div></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn primary" data-close>Start organizing</button>
+    </div>`;
+  openModal();
+}
+
+// ── Boot ───────────────────────────────────────────────────────
+(async function init() {
+  applySettingsMode();
+  await loadTree();
+  maybeFirstRunWizard();
+})();
+</script>
+</body>
+</html>

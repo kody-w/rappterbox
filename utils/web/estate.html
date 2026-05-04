@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Twin Estate</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: #161b22;
+    --panel-hover: #1c232c;
+    --border: #2a3140;
+    --text: #e6edf3;
+    --muted: #8d96a0;
+    --green: #3fb950;
+    --gray: #5a6470;
+    --blue: #58a6ff;
+    --gold: #d29922;
+    --purple: #b58ddf;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    padding: 24px 32px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 { margin: 0; font-size: 22px; font-weight: 600; }
+  header h1 .sub { display: block; font-size: 13px; font-weight: 400; color: var(--muted); margin-top: 4px; }
+  header nav { margin-top: 12px; font-size: 13px; }
+  header nav a { color: var(--blue); text-decoration: none; margin-right: 16px; }
+  header nav a:hover { text-decoration: underline; }
+  main { padding: 24px 32px; max-width: 1100px; margin: 0 auto; }
+  .twin {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+  }
+  .twin h2 {
+    margin: 0 0 4px;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .twin .rappid {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .twin .lineage {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .twin .lineage a { color: var(--blue); text-decoration: none; }
+  .twin .lineage a:hover { text-decoration: underline; }
+  .incarnations {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .incarnations h3 {
+    margin: 0 0 6px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .incarnation {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 0;
+    font-size: 13px;
+  }
+  .incarnation .scope {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .scope-global { background: rgba(63, 185, 80, 0.15); color: var(--green); }
+  .scope-twin   { background: rgba(181, 141, 223, 0.15); color: var(--purple); }
+  .scope-project { background: rgba(88, 166, 255, 0.15); color: var(--blue); }
+  .incarnation .port {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .incarnation .dir {
+    flex: 1;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .actions {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+  }
+  button {
+    background: var(--panel-hover);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    border-radius: 4px;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--blue); }
+  .empty {
+    color: var(--muted);
+    text-align: center;
+    padding: 48px 16px;
+    font-style: italic;
+  }
+  .eggs-section { margin-top: 32px; }
+  .eggs-section h2 {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin: 0 0 12px;
+  }
+  .egg {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    padding: 4px 0;
+    color: var(--muted);
+  }
+  .egg .ts { color: var(--text); }
+  .err { color: #f85149; padding: 12px; background: rgba(248, 81, 73, 0.1); border-radius: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Twin Estate
+    <span class="sub">Your twins on this device, grouped by identity. Each twin can have multiple incarnations (parallel omniscience).</span>
+  </h1>
+  <nav>
+    <a href="/web/neighborhood.html">Neighborhood (peers)</a>
+    <a href="/web/">Home</a>
+  </nav>
+</header>
+<main>
+  <div id="content">Loading…</div>
+  <div class="eggs-section">
+    <h2>Local Egg Backups</h2>
+    <div id="eggs">Loading…</div>
+  </div>
+</main>
+<script>
+async function fetchJSON(url, opts) {
+  const r = await fetch(url, opts);
+  if (!r.ok) throw new Error(url + " → " + r.status);
+  return await r.json();
+}
+
+function scopeLabel(inc) {
+  if (inc.is_global) return ['scope-global', 'global'];
+  if (inc.is_twin_only) return ['scope-twin', 'twin-only'];
+  return ['scope-project', inc.project_name || 'project'];
+}
+
+function renderTwins(data) {
+  const root = document.getElementById('content');
+  if (data.error) { root.innerHTML = '<div class="err">'+data.error+'</div>'; return; }
+  if (!data.twins || data.twins.length === 0) {
+    root.innerHTML = '<div class="empty">No twins on this device yet. Lay an egg of an existing twin or summon one.</div>';
+    return;
+  }
+  root.innerHTML = data.twins.map(t => {
+    const incs = (t.incarnations || []).map(inc => {
+      const [cls, label] = scopeLabel(inc);
+      return `
+        <div class="incarnation">
+          <span class="scope ${cls}">${label}</span>
+          <span class="port">localhost:${inc.port || '?'}</span>
+          <span class="dir">${inc.brainstem_dir || ''}</span>
+        </div>`;
+    }).join('');
+    const lineage = t.parent_repo
+      ? `<div class="lineage">parent: <a href="${t.parent_repo}" target="_blank" rel="noopener">${t.parent_repo}</a></div>`
+      : '';
+    return `
+      <div class="twin">
+        <h2>${t.name}</h2>
+        <div class="rappid">${t.rappid_uuid}</div>
+        ${lineage}
+        <div class="incarnations">
+          <h3>${t.incarnation_count} incarnation${t.incarnation_count === 1 ? '' : 's'}</h3>
+          ${incs}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderEggs(data) {
+  const root = document.getElementById('eggs');
+  if (data.error) { root.innerHTML = '<div class="err">'+data.error+'</div>'; return; }
+  if (!data.eggs || data.eggs.length === 0) {
+    root.innerHTML = '<div class="empty">No local eggs yet. Use lay-egg.sh in a twin repo to back one up.</div>';
+    return;
+  }
+  root.innerHTML = data.eggs.map(e => `
+    <div class="egg">
+      <span class="ts">${e.mtime}</span> &nbsp;
+      ${e.rappid_uuid.slice(0, 8)}…/${e.filename}
+      &nbsp;(${(e.size_bytes / 1024).toFixed(1)} KB)
+    </div>`).join('');
+}
+
+(async () => {
+  try {
+    renderTwins(await fetchJSON('/api/estate/twins'));
+  } catch (e) {
+    document.getElementById('content').innerHTML = '<div class="err">'+e.message+'</div>';
+  }
+  try {
+    renderEggs(await fetchJSON('/api/estate/eggs'));
+  } catch (e) {
+    document.getElementById('eggs').innerHTML = '<div class="err">'+e.message+'</div>';
+  }
+})();
+</script>
+</body>
+</html>

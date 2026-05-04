@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Brainstem Pair">
+<meta name="format-detection" content="telephone=no">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0d1117">
+<title>Brainstem Pair · Group Chat</title>
+
+<!--
+  ╔══════════════════════════════════════════════════════════════════╗
+  ║  Brainstem Pair — experimental two-device group chat.            ║
+  ║                                                                   ║
+  ║  Deliberately a SEPARATE file from the main vbrainstem so any    ║
+  ║  breakage stays contained here. Does not import any module from  ║
+  ║  /web/index.html. Reads (read-only) the same rapp_settings       ║
+  ║  localStorage key for Copilot auth — that's the only same-origin ║
+  ║  coupling, and it never writes back.                              ║
+  ║                                                                   ║
+  ║  Signaling: PeerJS public broker (peerjs.com). Chosen for v1     ║
+  ║  because it gives us zero infrastructure change — no worker      ║
+  ║  edits, no Durable Objects, no Cloudflare KV. Trade: we depend   ║
+  ║  on PeerJS uptime for the handshake. Once the WebRTC channel     ║
+  ║  opens (~3 seconds typical), the broker drops out and chat is    ║
+  ║  fully P2P + E2E encrypted (DTLS-SRTP). Swap to a self-hosted    ║
+  ║  signaling layer later by replacing the `setupSignaling()` fn    ║
+  ║  — everything else is broker-agnostic.                            ║
+  ║                                                                   ║
+  ║  Pairing security:                                                ║
+  ║   1. Host generates an ECDSA P-256 keypair on first launch.      ║
+  ║   2. Public-key fingerprint goes into the QR alongside the room  ║
+  ║      ID. Guest verifies the host's pubkey matches when received  ║
+  ║      over the data channel.                                       ║
+  ║   3. Both devices show a 6-digit safety code derived from        ║
+  ║      sha256(hostPub || guestPub). User must verify both screens  ║
+  ║      match before chat starts. This defeats a malicious broker.  ║
+  ╚══════════════════════════════════════════════════════════════════╝
+-->
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overscroll-behavior-y: none; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: #0d1117; color: #e6edf3;
+    height: 100vh; height: 100dvh;
+    display: flex; flex-direction: column;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  header {
+    padding: 12px 20px;
+    padding-top: max(12px, env(safe-area-inset-top));
+    border-bottom: 1px solid #21262d; background: #161b22;
+    display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+  }
+  .logo {
+    width: 28px; height: 28px; border-radius: 6px;
+    background: linear-gradient(135deg, #1f6feb, #58a6ff);
+    display: flex; align-items: center; justify-content: center;
+    color: #fff;
+  }
+  .logo svg { width: 18px; height: 18px; fill: currentColor; }
+  header h1 { font-size: 14px; font-weight: 600; }
+  header h1 .badge {
+    display: inline-block; vertical-align: middle; margin-left: 8px;
+    font-size: 9px; padding: 2px 6px; border-radius: 3px;
+    background: rgba(167,139,250,.15); color: #c4b5fd;
+    border: 1px solid rgba(167,139,250,.4); font-weight: 600;
+  }
+  header .role-pill {
+    margin-left: auto;
+    font-size: 11px; padding: 3px 8px; border-radius: 10px;
+    background: rgba(31,111,235,.15); color: #58a6ff;
+    border: 1px solid rgba(31,111,235,.4); font-weight: 600;
+  }
+  header .role-pill.host { background: rgba(63,185,80,.15); color: #3fb950; border-color: rgba(63,185,80,.4); }
+
+  main {
+    flex: 1; padding: 20px;
+    padding-left: max(20px, env(safe-area-inset-left));
+    padding-right: max(20px, env(safe-area-inset-right));
+    overflow-y: auto;
+    display: flex; flex-direction: column;
+  }
+  main[hidden] { display: none; }
+
+  /* Centered card layout for the pre-chat states */
+  .card-wrap { margin: auto; max-width: 440px; width: 100%; }
+  .card {
+    background: #161b22; border: 1px solid #30363d; border-radius: 12px;
+    padding: 24px; text-align: center;
+  }
+  .card h2 { font-size: 18px; margin-bottom: 8px; font-weight: 700; }
+  .card .blurb { font-size: 13px; color: #8b949e; line-height: 1.55; margin-bottom: 18px; }
+
+  .btn {
+    background: #1f6feb; color: #fff; border: none; border-radius: 8px;
+    padding: 12px 20px; font-size: 14px; font-weight: 600;
+    cursor: pointer; font-family: inherit; transition: background .15s;
+    display: inline-flex; align-items: center; gap: 8px; justify-content: center;
+  }
+  .btn:hover { background: #388bfd; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn-ghost {
+    background: transparent; color: #8b949e; border: none;
+    font-size: 12px; padding: 8px; cursor: pointer; font-family: inherit;
+  }
+  .btn-ghost:hover { color: #e6edf3; }
+  .btn-secondary {
+    background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 8px;
+    padding: 10px 16px; font-size: 13px; font-weight: 500;
+    cursor: pointer; font-family: inherit;
+  }
+  .btn-secondary:hover { background: #30363d; }
+
+  /* QR display panel */
+  #qr-canvas {
+    background: #fff; padding: 12px; border-radius: 8px;
+    display: inline-block; margin: 8px auto;
+  }
+  #qr-canvas img, #qr-canvas table { display: block; margin: 0 auto; }
+  .url-pill {
+    display: block; font-size: 10px; color: #8b949e;
+    background: #0d1117; border: 1px solid #21262d; border-radius: 6px;
+    padding: 8px 10px; margin: 12px 0;
+    word-break: break-all; line-height: 1.4;
+    font-family: "SF Mono", ui-monospace, monospace;
+    user-select: all;
+  }
+  .status-line {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12px; color: #8b949e; margin: 14px 0;
+    padding: 8px 12px; border-radius: 6px; background: #0d1117;
+    border: 1px solid #21262d;
+  }
+  .status-line .pulse {
+    width: 8px; height: 8px; border-radius: 50%; background: #d29922;
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  .status-line.ok .pulse { background: #3fb950; animation: none; }
+  .status-line.err .pulse { background: #f85149; animation: none; }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: .4; transform: scale(.7); }
+  }
+
+  /* Safety code verification */
+  .safety-code {
+    font-family: "SF Mono", ui-monospace, monospace;
+    font-size: 36px; font-weight: 700;
+    letter-spacing: 8px; color: #58a6ff;
+    background: #0d1117; border: 2px solid #1f6feb; border-radius: 8px;
+    padding: 18px; margin: 16px 0; user-select: all;
+  }
+  .safety-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+  /* Chat surface */
+  .chat-wrap { flex: 1; display: flex; flex-direction: column; max-width: 760px; margin: 0 auto; width: 100%; }
+  #chat-log {
+    flex: 1; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 12px;
+    padding-bottom: 12px;
+  }
+  .msg { display: flex; gap: 10px; max-width: 92%; }
+  .msg.from-self { align-self: flex-end; flex-direction: row-reverse; }
+  .msg .avatar {
+    width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 600;
+  }
+  .msg.from-host    .avatar { background: rgba(63,185,80,.15);  color: #3fb950; border: 1px solid rgba(63,185,80,.4); }
+  .msg.from-guest   .avatar { background: rgba(31,111,235,.15); color: #58a6ff; border: 1px solid rgba(31,111,235,.4); }
+  .msg.from-system  .avatar { background: rgba(139,148,158,.15); color: #8b949e; border: 1px solid rgba(139,148,158,.4); }
+  .msg .body {
+    background: #161b22; border: 1px solid #21262d; border-radius: 12px;
+    padding: 10px 14px; font-size: 14px; line-height: 1.55;
+    word-break: break-word; white-space: pre-wrap;
+  }
+  .msg.from-self .body { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  .msg.from-system .body { background: transparent; border-style: dashed; color: #8b949e; font-style: italic; font-size: 12px; }
+  .msg .who { font-size: 10px; color: #6e7681; margin-bottom: 3px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+  .msg .role-tag {
+    display: inline-block; font-size: 9px; padding: 1px 5px; border-radius: 3px;
+    background: rgba(167,139,250,.15); color: #c4b5fd;
+    border: 1px solid rgba(167,139,250,.3); margin-left: 5px; vertical-align: middle;
+  }
+
+  /* Input row */
+  .input-zone {
+    border-top: 1px solid #21262d; padding-top: 12px;
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+  .input-row {
+    display: flex; gap: 8px; align-items: flex-end;
+    max-width: 760px; margin: 0 auto;
+  }
+  #input {
+    flex: 1; background: #0d1117; border: 1px solid #30363d; border-radius: 8px;
+    color: #e6edf3; font-size: 16px; line-height: 1.5;
+    padding: 10px 14px; resize: none; outline: none;
+    max-height: 120px; min-height: 42px;
+    font-family: inherit; transition: border-color .15s;
+  }
+  #input:focus { border-color: #1f6feb; }
+  #input::placeholder { color: #484f58; }
+  #send {
+    background: #1f6feb; color: #fff; border: none; border-radius: 8px;
+    padding: 0 18px; min-height: 42px; font-size: 14px; font-weight: 600;
+    cursor: pointer; font-family: inherit;
+  }
+  #send:hover { background: #388bfd; }
+  #send:disabled { opacity: .4; cursor: default; }
+  .hint {
+    text-align: center; font-size: 11px; color: #6e7681; margin-top: 6px;
+    max-width: 760px; margin-left: auto; margin-right: auto;
+  }
+  .hint code {
+    background: #0d1117; border: 1px solid #21262d; border-radius: 3px;
+    padding: 1px 5px; font-family: "SF Mono", ui-monospace, monospace; font-size: 10px;
+  }
+
+  .typing { display: inline-flex; gap: 3px; padding: 10px 14px; }
+  .typing span {
+    width: 6px; height: 6px; border-radius: 50%; background: #58a6ff;
+    animation: typing 1.2s ease-in-out infinite;
+  }
+  .typing span:nth-child(2) { animation-delay: .15s; }
+  .typing span:nth-child(3) { animation-delay: .3s; }
+  @keyframes typing {
+    0%, 60%, 100% { opacity: .3; transform: translateY(0); }
+    30% { opacity: 1; transform: translateY(-3px); }
+  }
+
+  @media (max-width: 720px) {
+    main { padding: 14px; }
+    .card { padding: 20px 16px; }
+    .safety-code { font-size: 28px; letter-spacing: 6px; padding: 14px; }
+    #send { min-width: 56px; }
+  }
+</style>
+</head>
+
+<body>
+
+<header>
+  <div class="logo">
+    <svg viewBox="0 0 512 512"><path d="M184 0c-30.9 0-56.5 22.7-61.1 52.3C54.5 67 0 130 0 206.8c0 41.6 17.4 79.2 45.3 105.9-2 9.2-3.3 18.8-3.3 28.7 0 55.3 35.8 102.2 85.5 119C142.2 493 172.6 512 208 512h16c35.3 0 64-28.7 64-64V86c0-8.8-7.2-16-16-16h-16c-8.8 0-16 7.2-16 16v16c0 8.8-7.2 16-16 16s-16-7.2-16-16V64c0-35.3-28.7-64-64-64h40zm144 0c30.9 0 56.5 22.7 61.1 52.3C457.5 67 512 130 512 206.8c0 41.6-17.4 79.2-45.3 105.9 2 9.2 3.3 18.8 3.3 28.7 0 55.3-35.8 102.2-85.5 119C369.8 493 339.4 512 304 512h-16c-35.3 0-64-28.7-64-64V86c0-8.8 7.2-16 16-16h16c8.8 0 16 7.2 16 16v16c0 8.8 7.2 16 16 16s16-7.2 16-16V64c0-35.3 28.7-64 64-64h-40z"/></svg>
+  </div>
+  <h1>Brainstem Pair<span class="badge">experimental</span></h1>
+  <span id="role-pill" class="role-pill" hidden></span>
+</header>
+
+<!-- ── State 1: Host landing — "Pair a device" ──────────────────────── -->
+<main id="screen-host">
+  <div class="card-wrap">
+    <div class="card">
+      <h2>Pair a device</h2>
+      <p class="blurb">Tether two brainstems into one group chat. Generate a QR, scan it from your other device, and your messages flow over a peer-to-peer channel — end-to-end encrypted, no server in the loop.</p>
+      <button class="btn" id="btn-host-start">Generate QR</button>
+      <p style="margin-top: 16px; font-size: 11px; color: #6e7681;">Both devices need to be online during the handshake. Once paired, the chat works as long as both are reachable on a network.</p>
+    </div>
+  </div>
+</main>
+
+<!-- ── State 2: Hosting — QR shown, waiting for guest ───────────────── -->
+<main id="screen-qr" hidden>
+  <div class="card-wrap">
+    <div class="card">
+      <h2>Scan with the other device</h2>
+      <p class="blurb">Open this QR code on your phone (or laptop, tablet — anything with a camera). The two devices will introduce themselves over a brief handshake, then drop into a group chat.</p>
+      <div id="qr-canvas"></div>
+      <div class="status-line" id="qr-status"><span class="pulse"></span><span id="qr-status-text">Waiting for the other device…</span></div>
+      <code class="url-pill" id="qr-url-text"></code>
+      <div class="safety-actions">
+        <button class="btn-secondary" id="btn-copy-url">Copy link</button>
+        <button class="btn-ghost" id="btn-cancel-host">Cancel</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- ── State 3: Joining (guest) ──────────────────────────────────────── -->
+<main id="screen-guest" hidden>
+  <div class="card-wrap">
+    <div class="card">
+      <h2>Joining session…</h2>
+      <p class="blurb">Connecting to the host brainstem. This usually takes 3–5 seconds.</p>
+      <div class="status-line" id="guest-status"><span class="pulse"></span><span id="guest-status-text">Establishing connection…</span></div>
+      <button class="btn-ghost" id="btn-cancel-guest" style="margin-top:8px">Cancel</button>
+    </div>
+  </div>
+</main>
+
+<!-- ── State 4: Safety-code verification ─────────────────────────────── -->
+<main id="screen-verify" hidden>
+  <div class="card-wrap">
+    <div class="card">
+      <h2>Verify the safety code</h2>
+      <p class="blurb">Both devices should show the same 6-digit code. If they don't match, abort — the connection may have been intercepted.</p>
+      <div class="safety-code" id="safety-code">······</div>
+      <div class="safety-actions">
+        <button class="btn" id="btn-confirm-safety">Codes match</button>
+        <button class="btn-ghost" id="btn-abort-safety">Mismatch — abort</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- ── State 5: Group chat ───────────────────────────────────────────── -->
+<main id="screen-chat" hidden>
+  <div class="chat-wrap">
+    <div id="chat-log"></div>
+    <div class="input-zone">
+      <div class="input-row">
+        <textarea id="input" placeholder="Type a message… (Shift+Enter for newline)" rows="1"></textarea>
+        <button id="send">Send</button>
+      </div>
+      <p class="hint">Address with <code>@host</code> or <code>@guest</code>. No prefix → both brainstems respond.</p>
+    </div>
+  </div>
+</main>
+
+<!-- ── State X: Error ────────────────────────────────────────────────── -->
+<main id="screen-error" hidden>
+  <div class="card-wrap">
+    <div class="card">
+      <h2 style="color:#f85149">Connection failed</h2>
+      <p class="blurb" id="error-msg">Something went wrong.</p>
+      <button class="btn-secondary" onclick="location.reload()">Try again</button>
+    </div>
+  </div>
+</main>
+
+<!-- ── External libraries (CDN + same-origin) ──────────────────────── -->
+<!-- PeerJS = WebRTC abstraction + free public signaling broker.
+     ~90KB. Battle-tested. Replaceable if we self-host signaling later. -->
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<!-- Same QR generator the main vbrainstem already uses for sign-in flow. -->
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+<!-- RAPP.Agent.parseAgentSource — same parser the main vbrainstem uses
+     to extract metadata + class name from a single-file agent. We share
+     this so an agent loaded in the binder appears in pair.html with
+     identical name/description/parameter shape. -->
+<script src="./rapp.js"></script>
+
+<script>
+'use strict';
+(() => {
+
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => [...document.querySelectorAll(s)];
+
+// ────────────────────────────────────────────────────────────────────
+//  State machine
+// ────────────────────────────────────────────────────────────────────
+const SCREENS = ['host', 'qr', 'guest', 'verify', 'chat', 'error'];
+function showScreen(name) {
+  for (const s of SCREENS) {
+    const el = document.getElementById('screen-' + s);
+    if (el) el.hidden = (s !== name);
+  }
+}
+function showError(msg) {
+  $('#error-msg').textContent = msg || 'Something went wrong.';
+  showScreen('error');
+}
+
+const state = {
+  role: null,             // 'host' | 'guest'
+  peer: null,             // PeerJS instance
+  conn: null,             // active DataConnection
+  myKey: null,            // {publicKey, privateKey}  (CryptoKey objects)
+  myPubB64: null,         // base64(spki)             (for transmission)
+  peerPubB64: null,       // remote spki             (received via handshake)
+  expectedFp: null,       // base64 fingerprint from QR (guest only)
+  roomId: null,
+  history: [],            // [{id, sender, text, at}]  shared across both devices
+  pendingReplies: new Map(),  // messageId -> typing indicator nodes
+};
+
+// ────────────────────────────────────────────────────────────────────
+//  Crypto helpers — Web Crypto for keys, hashing, fingerprints
+// ────────────────────────────────────────────────────────────────────
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+
+function bufToB64(buf) {
+  const bytes = new Uint8Array(buf);
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function b64ToBuf(b64) {
+  const s = atob(b64.replace(/-/g, '+').replace(/_/g, '/'));
+  const out = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+  return out.buffer;
+}
+
+async function generateKeypair() {
+  return await crypto.subtle.generateKey(
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    true,
+    ['sign', 'verify']
+  );
+}
+
+async function exportPubKey(key) {
+  const spki = await crypto.subtle.exportKey('spki', key);
+  return bufToB64(spki);
+}
+
+async function fingerprintOf(pubB64) {
+  // First 16 bytes of sha256(spki), base64-url encoded — short enough
+  // to fit in a QR without making it dense.
+  const spki = b64ToBuf(pubB64);
+  const hash = await crypto.subtle.digest('SHA-256', spki);
+  return bufToB64(hash.slice(0, 16));
+}
+
+async function safetyCodeFromPubs(hostPubB64, guestPubB64) {
+  // SHA-256 of (hostPub || guestPub), take the leading 4 bytes,
+  // mod 1_000_000 → zero-padded 6-digit decimal. Same input on both
+  // sides yields the same output, so users can eyeball-compare.
+  const a = new Uint8Array(b64ToBuf(hostPubB64));
+  const b = new Uint8Array(b64ToBuf(guestPubB64));
+  const cat = new Uint8Array(a.length + b.length);
+  cat.set(a, 0); cat.set(b, a.length);
+  const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', cat));
+  const n = (hash[0] << 24 >>> 0) + (hash[1] << 16) + (hash[2] << 8) + hash[3];
+  return String(n % 1_000_000).padStart(6, '0');
+}
+
+// ────────────────────────────────────────────────────────────────────
+//  PeerJS signaling + WebRTC DataChannel
+// ────────────────────────────────────────────────────────────────────
+function setupSignaling(roleId) {
+  // PeerJS public broker. Replace with self-hosted signaling later by
+  // swapping this constructor — everything downstream is broker-agnostic.
+  return new Peer(roleId, {
+    debug: 1,
+    config: {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:global.stun.twilio.com:3478' },
+      ],
+    },
+  });
+}
+
+// Wire a DataConnection's lifecycle: handshake → safety code → chat.
+function attachConnection(conn) {
+  state.conn = conn;
+  conn.on('open', async () => {
+    // Send our pubkey first so the other side can verify + compute the
+    // safety code. The host also expects to see the guest's pubkey here.
+    conn.send({ type: 'handshake', pubkey: state.myPubB64 });
+  });
+  conn.on('data', handleIncoming);
+  conn.on('close', () => {
+    appendSystemMsg('Peer disconnected.');
+  });
+  conn.on('error', (e) => {
+    console.warn('[pair] data channel error:', e);
+    appendSystemMsg('Channel error: ' + (e?.message || e));
+  });
+}
+
+async function handleIncoming(payload) {
+  if (!payload || typeof payload !== 'object') return;
+
+  switch (payload.type) {
+    case 'handshake': {
+      state.peerPubB64 = payload.pubkey;
+      // Guest must verify the host's pubkey matches the QR fingerprint.
+      if (state.role === 'guest' && state.expectedFp) {
+        const fp = await fingerprintOf(state.peerPubB64);
+        if (fp !== state.expectedFp) {
+          showError('Host fingerprint mismatch. Aborting — possible MITM.');
+          state.conn?.close();
+          return;
+        }
+      }
+      // Both sides compute the same safety code from (host, guest) keys.
+      const hostPub  = state.role === 'host'  ? state.myPubB64 : state.peerPubB64;
+      const guestPub = state.role === 'guest' ? state.myPubB64 : state.peerPubB64;
+      const code = await safetyCodeFromPubs(hostPub, guestPub);
+      $('#safety-code').textContent = code.replace(/(\d{3})(\d{3})/, '$1 $2');
+      showScreen('verify');
+      return;
+    }
+    case 'safety_ok': {
+      // Both sides have visually verified. Move to chat.
+      enterChat();
+      return;
+    }
+    case 'msg': {
+      appendChatMsg({
+        id: payload.id,
+        sender: payload.sender,         // 'host' | 'guest' — perspective of sender
+        text: payload.text,
+        at: payload.at,
+        kind: payload.kind || 'user',   // 'user' | 'assistant'
+        replyTo: payload.replyTo,
+      });
+      // If addressed and we're a brainstem, run our LLM completion.
+      if (payload.kind === 'user') {
+        maybeRespondToMessage(payload);
+      }
+      return;
+    }
+    case 'typing_start': {
+      showTypingIndicator(payload.from);
+      return;
+    }
+    case 'typing_stop': {
+      hideTypingIndicator(payload.from);
+      return;
+    }
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────
+//  Boot — decide host vs guest, kick off
+// ────────────────────────────────────────────────────────────────────
+async function boot() {
+  const params = new URLSearchParams(location.search);
+  const pairId = params.get('pair');
+  const fp = params.get('fp');
+
+  // Always generate our own keypair on boot — fresh per session.
+  state.myKey = await generateKeypair();
+  state.myPubB64 = await exportPubKey(state.myKey.publicKey);
+
+  if (pairId) {
+    state.role = 'guest';
+    state.roomId = pairId;
+    state.expectedFp = fp;
+    $('#role-pill').textContent = '📱 guest'; $('#role-pill').hidden = false;
+    showScreen('guest');
+    startGuest(pairId);
+  } else {
+    state.role = 'host';
+    $('#role-pill').textContent = '💻 host'; $('#role-pill').hidden = false; $('#role-pill').classList.add('host');
+    showScreen('host');
+  }
+
+  wire();
+}
+
+function wire() {
+  $('#btn-host-start')?.addEventListener('click', startHost);
+  $('#btn-cancel-host')?.addEventListener('click', () => location.reload());
+  $('#btn-cancel-guest')?.addEventListener('click', () => location.reload());
+  $('#btn-confirm-safety')?.addEventListener('click', () => {
+    state.conn?.send({ type: 'safety_ok' });
+    enterChat();
+  });
+  $('#btn-abort-safety')?.addEventListener('click', () => {
+    state.conn?.close();
+    state.peer?.destroy();
+    location.reload();
+  });
+  $('#btn-copy-url')?.addEventListener('click', () => {
+    const url = $('#qr-url-text').textContent;
+    navigator.clipboard?.writeText(url).then(() => {
+      const b = $('#btn-copy-url');
+      const orig = b.textContent;
+      b.textContent = '✓ Copied';
+      setTimeout(() => { b.textContent = orig; }, 1400);
+    });
+  });
+  $('#send')?.addEventListener('click', sendChatMessage);
+  const inp = $('#input');
+  inp?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
+  });
+  inp?.addEventListener('input', () => {
+    inp.style.height = 'auto';
+    inp.style.height = Math.min(120, inp.scrollHeight) + 'px';
+  });
+}
+
+// ────────────────────────────────────────────────────────────────────
+//  Host flow
+// ────────────────────────────────────────────────────────────────────
+async function startHost() {
+  $('#btn-host-start').disabled = true;
+  $('#btn-host-start').textContent = 'Setting up…';
+
+  state.roomId = 'rapp-pair-' + crypto.randomUUID().slice(0, 18);
+  const fingerprint = await fingerprintOf(state.myPubB64);
+  const url = `${location.origin}${location.pathname}?pair=${encodeURIComponent(state.roomId)}&fp=${encodeURIComponent(fingerprint)}`;
+
+  // Render the QR up front so users see it before signaling completes.
+  renderQR(url);
+  $('#qr-url-text').textContent = url;
+  showScreen('qr');
+
+  state.peer = setupSignaling(state.roomId);
+  state.peer.on('open', (id) => {
+    $('#qr-status-text').textContent = 'Waiting for the other device to scan…';
+  });
+  state.peer.on('connection', (conn) => {
+    $('#qr-status-text').textContent = 'Other device connecting…';
+    $('#qr-status').classList.add('ok');
+    attachConnection(conn);
+  });
+  state.peer.on('error', (err) => {
+    console.error('[pair] peer error', err);
+    if (err.type === 'unavailable-id') {
+      // Extremely rare collision on the public broker — regenerate.
+      $('#qr-status-text').textContent = 'Room ID collision, retrying…';
+      setTimeout(() => location.reload(), 1500);
+      return;
+    }
+    showError('Signaling failed: ' + (err.type || err.message || err));
+  });
+}
+
+function renderQR(url) {
+  const canvas = $('#qr-canvas');
+  canvas.innerHTML = '';
+  // qrcode-generator: type 0 = auto-detect, level L = ~7% error correction
+  const qr = qrcode(0, 'M');
+  qr.addData(url);
+  qr.make();
+  canvas.innerHTML = qr.createSvgTag({ cellSize: 6, margin: 2, scalable: true });
+}
+
+// ────────────────────────────────────────────────────────────────────
+//  Guest flow
+// ────────────────────────────────────────────────────────────────────
+function startGuest(roomId) {
+  $('#guest-status-text').textContent = 'Registering with broker…';
+  state.peer = setupSignaling(undefined);   // random id
+  state.peer.on('open', () => {
+    $('#guest-status-text').textContent = 'Connecting to host…';
+    const conn = state.peer.connect(roomId, { reliable: true });
+    attachConnection(conn);
+    // PeerJS doesn't always fire 'error' if the host id doesn't exist;
+    // give it a window then bail with a clearer message.
+    setTimeout(() => {
+      if (!state.peerPubB64) {
+        showError('Couldn\'t reach the host. The QR may have expired or the host closed it.');
+      }
+    }, 12_000);
+  });
+  state.peer.on('error', (err) => {
+    console.error('[pair] peer error', err);
+    showError('Signaling failed: ' + (err.type || err.message || err));
+  });
+}
+
+// ────────────────────────────────────────────────────────────────────
+//  Chat
+// ────────────────────────────────────────────────────────────────────
+function enterChat() {
+  showScreen('chat');
+  appendSystemMsg(`Connected. ${state.role === 'host' ? 'You are the host.' : 'You are the guest.'}`);
+  appendSystemMsg('Tip: prefix with @host or @guest to address one brainstem only.');
+  $('#input').focus();
+}
+
+function appendSystemMsg(text) {
+  const log = $('#chat-log');
+  const m = document.createElement('div');
+  m.className = 'msg from-system';
+  m.innerHTML = `<div class="avatar">i</div><div><div class="body">${escapeHtml(text)}</div></div>`;
+  log.appendChild(m);
+  log.scrollTop = log.scrollHeight;
+}
+
+function appendChatMsg({ id, sender, text, at, kind, replyTo }) {
+  state.history.push({ id, sender, text, at, kind });
+  const log = $('#chat-log');
+  const m = document.createElement('div');
+  const isSelf = sender === state.role && kind === 'user';
+  const senderLabel = (sender === 'host' ? '💻 host' : '📱 guest');
+  const roleTag = kind === 'assistant' ? '<span class="role-tag">brainstem</span>' : '';
+  m.className = `msg from-${sender}` + (isSelf ? ' from-self' : '');
+  m.innerHTML = `
+    <div class="avatar">${sender === 'host' ? '💻' : '📱'}</div>
+    <div>
+      <div class="who">${senderLabel}${roleTag}</div>
+      <div class="body">${escapeHtml(text)}</div>
+    </div>`;
+  log.appendChild(m);
+  log.scrollTop = log.scrollHeight;
+}
+
+function showTypingIndicator(from) {
+  hideTypingIndicator(from);
+  const log = $('#chat-log');
+  const m = document.createElement('div');
+  m.className = `msg from-${from}`;
+  m.dataset.typing = from;
+  m.innerHTML = `<div class="avatar">${from === 'host' ? '💻' : '📱'}</div><div class="body" style="padding:0"><div class="typing"><span></span><span></span><span></span></div></div>`;
+  log.appendChild(m);
+  log.scrollTop = log.scrollHeight;
+}
+function hideTypingIndicator(from) {
+  $$('[data-typing="' + from + '"]').forEach(n => n.remove());
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function sendChatMessage() {
+  const inp = $('#input');
+  const text = inp.value.trim();
+  if (!text || !state.conn) return;
+  const id = crypto.randomUUID();
+  const at = Date.now();
+  const envelope = { type: 'msg', id, sender: state.role, text, at, kind: 'user' };
+  // Append locally + broadcast — both copies stay in sync because we
+  // never re-send the same id, and the receiver appends as-is.
+  appendChatMsg(envelope);
+  state.conn.send(envelope);
+  inp.value = '';
+  inp.style.height = 'auto';
+  // Trigger our own brainstem if addressed to us / both
+  maybeRespondToMessage(envelope);
+}
+
+// ────────────────────────────────────────────────────────────────────
+//  Per-device LLM completion (uses same Copilot auth as main vbrainstem)
+// ────────────────────────────────────────────────────────────────────
+const AUTH_WORKER_URL = 'https://rapp-auth.kwildfeuer.workers.dev';
+const COPILOT_DEFAULT_API = 'https://api.individual.githubcopilot.com';
+
+function readSettings() {
+  // Read-only — we never write back to rapp_settings, so we can't
+  // corrupt the main vbrainstem's auth state from here.
+  try {
+    const raw = localStorage.getItem('rapp_settings');
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function deviceLabel(role) { return role === 'host' ? 'host (laptop)' : 'guest (phone)'; }
+
+function shouldRespond(envelope) {
+  const text = (envelope.text || '').trim();
+  const lower = text.toLowerCase();
+  const hostMatch = /(^|\s)@(host|laptop|desktop|computer)\b/.test(lower);
+  const guestMatch = /(^|\s)@(guest|phone|mobile|ios|android)\b/.test(lower);
+  if (hostMatch && !guestMatch)  return state.role === 'host';
+  if (guestMatch && !hostMatch)  return state.role === 'guest';
+  // No prefix or @both → both brainstems respond
+  return true;
+}
+
+async function maybeRespondToMessage(envelope) {
+  if (!shouldRespond(envelope)) return;
+  if (state.history.find(h => h.replyTo === envelope.id && h.sender === state.role)) return;  // already responded
+  const settings = readSettings();
+  if (!settings || !settings.copilotToken) {
+    appendChatMsg({
+      id: crypto.randomUUID(),
+      sender: state.role, kind: 'assistant',
+      text: `(${deviceLabel(state.role)} brainstem isn't signed in to Copilot — open the main brainstem to sign in.)`,
+      at: Date.now(), replyTo: envelope.id,
+    });
+    return;
+  }
+  if (Date.now() > settings.copilotExpiresAt - 30_000) {
+    appendChatMsg({
+      id: crypto.randomUUID(),
+      sender: state.role, kind: 'assistant',
+      text: `(${deviceLabel(state.role)} brainstem's Copilot session expired — refresh the main brainstem to renew.)`,
+      at: Date.now(), replyTo: envelope.id,
+    });
+    return;
+  }
+
+  // Optimistic typing indicator on both sides
+  state.conn?.send({ type: 'typing_start', from: state.role });
+  showTypingIndicator(state.role);
+
+  try {
+    const reply = await callCopilot(envelope, settings);
+    hideTypingIndicator(state.role);
+    state.conn?.send({ type: 'typing_stop', from: state.role });
+    const out = {
+      type: 'msg',
+      id: crypto.randomUUID(),
+      sender: state.role,
+      kind: 'assistant',
+      text: reply,
+      at: Date.now(),
+      replyTo: envelope.id,
+    };
+    appendChatMsg(out);
+    state.conn?.send(out);
+  } catch (e) {
+    hideTypingIndicator(state.role);
+    state.conn?.send({ type: 'typing_stop', from: state.role });
+    appendChatMsg({
+      id: crypto.randomUUID(),
+      sender: state.role, kind: 'assistant',
+      text: `(${deviceLabel(state.role)} brainstem error: ${e.message})`,
+      at: Date.now(), replyTo: envelope.id,
+    });
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  Pyodide agent runtime — parity with the main vbrainstem
+// ════════════════════════════════════════════════════════════════════
+// Both addressed brainstems can run real tools (single-file *_agent.py
+// from the local binder hand) when the LLM asks for them. We share the
+// hand via same-origin localStorage (rapp_binder + rapp_hand keys), and
+// the Python shims (utils.llm, utils.local_storage, utils.azure_file_storage,
+// utils.dynamics_storage, utils.storage_factory, utils.device) are
+// fetched live from the main vbrainstem's index.html — that way they
+// can never drift, but pair.html stays a self-contained HTML file
+// (no /web/index.html runtime is loaded; we just regex out the embedded
+// Python source). If extraction fails we surface a clear error and the
+// chat keeps working with no tools, gracefully.
+
+let _pyodide = null;
+let _pyodideLoading = null;
+let _shims = null;
+
+async function loadShimsFromMain() {
+  if (_shims) return _shims;
+  const html = await (await fetch('./index.html', { cache: 'no-store' })).text();
+  const extract = (name) => {
+    const re = new RegExp('const ' + name + ' = `([\\s\\S]*?)`;');
+    const m = html.match(re);
+    if (!m) throw new Error(`shim missing in main brainstem: ${name}`);
+    return m[1];
+  };
+  _shims = {
+    llm:     extract('VBRAINSTEM_LLM_SHIM'),
+    storage: extract('VBRAINSTEM_STORAGE_SHIM'),
+    azure:   extract('VBRAINSTEM_AZURE_STORAGE_SHIM'),
+    dyn:     extract('VBRAINSTEM_DYNAMICS_STORAGE_SHIM'),
+    factory: extract('VBRAINSTEM_STORAGE_FACTORY_SHIM'),
+    device:  extract('VBRAINSTEM_DEVICE_SHIM'),
+  };
+  return _shims;
+}
+
+async function ensurePyodide() {
+  if (_pyodide) return _pyodide;
+  if (!_pyodideLoading) {
+    _pyodideLoading = (async () => {
+      const shims = await loadShimsFromMain();
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js';
+      document.head.appendChild(s);
+      await new Promise(r => s.onload = r);
+      _pyodide = await window.loadPyodide();
+      // BasicAgent — fetched from the brainstem's agents directory so
+      // we use whatever class shape the local install ships.
+      const basic = await (await fetch('../agents/basic_agent.py')).text();
+      _pyodide.FS.mkdirTree('/agents');
+      _pyodide.FS.writeFile('/agents/basic_agent.py', basic);
+      _pyodide.FS.writeFile('/agents/__init__.py', '');
+      _pyodide.FS.mkdirTree('/openrappter/agents');
+      _pyodide.FS.writeFile('/openrappter/__init__.py', '');
+      _pyodide.FS.writeFile('/openrappter/agents/__init__.py', '');
+      _pyodide.FS.writeFile('/openrappter/agents/basic_agent.py', basic);
+      _pyodide.FS.mkdirTree('/utils');
+      _pyodide.FS.writeFile('/utils/__init__.py', '');
+      _pyodide.FS.writeFile('/utils/llm.py', shims.llm);
+      _pyodide.FS.writeFile('/utils/local_storage.py', shims.storage);
+      _pyodide.FS.writeFile('/utils/azure_file_storage.py', shims.azure);
+      _pyodide.FS.writeFile('/utils/dynamics_storage.py', shims.dyn);
+      _pyodide.FS.writeFile('/utils/storage_factory.py', shims.factory);
+      _pyodide.FS.writeFile('/utils/device.py', shims.device);
+      await _pyodide.runPythonAsync(`import sys; sys.path.insert(0, '/')`);
+    })();
+  }
+  await _pyodideLoading;
+  return _pyodide;
+}
+
+// ── Hand discovery (read-only from same-origin localStorage) ────────
+function getHandCards() {
+  let binder = null, handFiles = [];
+  try { binder = JSON.parse(localStorage.getItem('rapp_binder') || 'null'); } catch {}
+  try { handFiles = JSON.parse(localStorage.getItem('rapp_hand') || '[]'); } catch {}
+  if (!binder || !Array.isArray(binder.cards)) return [];
+  const handSet = new Set(handFiles);
+  const out = [];
+  for (const card of binder.cards) {
+    if (!handSet.has(card.filename)) continue;
+    let parsed = { name: card.filename.replace(/_agent\.py$/, ''), className: '', metadata: {} };
+    try {
+      if (window.RAPP && window.RAPP.Agent) {
+        parsed = window.RAPP.Agent.parseAgentSource(card.source, card.filename);
+      }
+    } catch (e) { console.warn('[pair] parse', card.filename, e); }
+    out.push({ card, parsed });
+  }
+  return out;
+}
+
+function binderTools() {
+  return getHandCards().map(({ parsed }) => ({
+    type: 'function',
+    function: {
+      name: parsed.name,
+      description: (parsed.metadata && parsed.metadata.description) || '',
+      parameters: (parsed.metadata && parsed.metadata.parameters) || { type: 'object', properties: {}, required: [] },
+    },
+  }));
+}
+
+function findCardByAgentName(name) {
+  for (const entry of getHandCards()) if (entry.parsed.name === name) return entry;
+  return null;
+}
+
+// ── Device capability surface (window.vb.device, slimmer than the
+//    main vbrainstem's but uses the same wire shape so utils/device.py
+//    works unchanged). Local _wakeLockHandle keeps wake-lock state
+//    inside this closure rather than on the chat state object — that
+//    way pair.html's runtime is fully self-contained. ────────────
+let _wakeLockHandle = null;
+function installPairDeviceAPI() {
+  if (window.vb && window.vb.device) return;   // idempotent
+  const caps = {
+    geolocation:       'geolocation' in navigator,
+    screen:            !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia),
+    camera:            !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
+    fs:                'showOpenFilePicker' in window,
+    opfs:              !!(navigator.storage && navigator.storage.getDirectory),
+    clipboard:         !!navigator.clipboard,
+    speechSynthesis:   'speechSynthesis' in window,
+    speechRecognition: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
+    notifications:     'Notification' in window,
+    badge:             'setAppBadge' in navigator,
+    wakeLock:          !!navigator.wakeLock,
+    persistStorage:    !!(navigator.storage && navigator.storage.persist),
+    vibrate:           'vibrate' in navigator,
+  };
+  function gesture(cap, why) {
+    return new Promise((ok, no) => {
+      const m = document.createElement('div');
+      m.style.cssText = 'position:fixed;top:20px;right:20px;z-index:9999;background:#161b22;border:1px solid #30363d;border-left:3px solid #1f6feb;border-radius:8px;padding:14px 16px;box-shadow:0 6px 20px rgba(0,0,0,.6);max-width:340px;font-family:inherit;color:#e6edf3';
+      m.innerHTML = `<div style="font-size:13px;font-weight:600;margin-bottom:6px">Agent requesting: ${cap}</div>
+        <div style="font-size:11px;color:#8b949e;margin-bottom:12px">${why || ''}</div>
+        <div style="display:flex;gap:6px;justify-content:flex-end">
+          <button class="btn-secondary" data-act="deny">Deny</button>
+          <button class="btn" data-act="allow">Allow</button>
+        </div>`;
+      document.body.appendChild(m);
+      m.addEventListener('click', e => {
+        const a = e.target.dataset.act;
+        if (!a) return;
+        m.remove();
+        if (a === 'allow') ok(); else no(new Error(`user denied: ${cap}`));
+      });
+    });
+  }
+  const device = {
+    async geolocation() {
+      if (!caps.geolocation) throw new Error('geolocation not supported');
+      return new Promise((res, rej) => navigator.geolocation.getCurrentPosition(
+        p => res({ latitude: p.coords.latitude, longitude: p.coords.longitude, accuracy: p.coords.accuracy, altitude: p.coords.altitude, heading: p.coords.heading, speed: p.coords.speed, timestamp: p.timestamp }),
+        e => rej(new Error('geolocation: ' + e.message)),
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      ));
+    },
+    async captureScreen() {
+      if (!caps.screen) throw new Error('screen capture not supported');
+      await gesture('Screen capture', 'Click Allow, then choose a tab/window/screen.');
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      const track = stream.getVideoTracks()[0];
+      const canvas = document.createElement('canvas');
+      let w, h, src;
+      if (typeof ImageCapture !== 'undefined') {
+        const bm = await new ImageCapture(track).grabFrame();
+        w = bm.width; h = bm.height; src = bm;
+      } else {
+        const v = document.createElement('video');
+        v.srcObject = stream; await new Promise(r => v.onloadedmetadata = r); await v.play();
+        await new Promise(r => requestAnimationFrame(r));
+        w = v.videoWidth; h = v.videoHeight; src = v;
+      }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(src, 0, 0);
+      track.stop();
+      return { dataUrl: canvas.toDataURL('image/png'), width: w, height: h };
+    },
+    async openFile(accept) {
+      if (!caps.fs) throw new Error('File System Access API not supported');
+      await gesture('Open file', `Choose a file${accept ? ' (' + accept + ')' : ''}.`);
+      const types = accept ? [{ description: 'Files', accept: { '*/*': accept.split(',').map(s => s.trim()) } }] : [];
+      const [h] = await window.showOpenFilePicker({ types, multiple: false });
+      const f = await h.getFile();
+      return { name: f.name, type: f.type, size: f.size, text: await f.text() };
+    },
+    async saveFile(name, content) {
+      if (!caps.fs) throw new Error('File System Access API not supported');
+      await gesture('Save file', `Save "${name}".`);
+      const h = await window.showSaveFilePicker({ suggestedName: name });
+      const w = await h.createWritable(); await w.write(content); await w.close(); return true;
+    },
+    async opfsRead(path) {
+      if (!caps.opfs) throw new Error('OPFS not supported');
+      const root = await navigator.storage.getDirectory();
+      const parts = String(path).split('/').filter(Boolean); const fname = parts.pop();
+      let dir = root; for (const p of parts) dir = await dir.getDirectoryHandle(p, { create: false });
+      const fh = await dir.getFileHandle(fname); return await (await fh.getFile()).text();
+    },
+    async opfsWrite(path, content) {
+      if (!caps.opfs) throw new Error('OPFS not supported');
+      const root = await navigator.storage.getDirectory();
+      const parts = String(path).split('/').filter(Boolean); const fname = parts.pop();
+      let dir = root; for (const p of parts) dir = await dir.getDirectoryHandle(p, { create: true });
+      const fh = await dir.getFileHandle(fname, { create: true });
+      const w = await fh.createWritable(); await w.write(content); await w.close(); return true;
+    },
+    async opfsList(prefix) {
+      if (!caps.opfs) throw new Error('OPFS not supported');
+      const root = await navigator.storage.getDirectory();
+      const parts = String(prefix || '').split('/').filter(Boolean);
+      let dir = root; for (const p of parts) { try { dir = await dir.getDirectoryHandle(p, { create: false }); } catch { return []; } }
+      const out = []; for await (const [name, h] of dir.entries()) out.push({ name, kind: h.kind }); return out;
+    },
+    async clipboardRead() { try { return await navigator.clipboard.readText(); } catch { await gesture('Clipboard read'); return await navigator.clipboard.readText(); } },
+    async clipboardWrite(t) { try { await navigator.clipboard.writeText(t); return true; } catch { await gesture('Clipboard write'); await navigator.clipboard.writeText(t); return true; } },
+    async speak(text, lang) {
+      if (!caps.speechSynthesis) throw new Error('TTS not supported');
+      return new Promise(r => { const u = new SpeechSynthesisUtterance(String(text)); if (lang) u.lang = lang; u.onend = () => r(true); u.onerror = () => r(false); speechSynthesis.speak(u); });
+    },
+    async listen(timeout, lang) {
+      if (!caps.speechRecognition) throw new Error('STT not supported');
+      const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      return new Promise((res, rej) => {
+        const r = new Rec(); r.lang = lang || 'en-US'; r.continuous = false; r.interimResults = false;
+        let done = false;
+        const t = setTimeout(() => { if (done) return; done = true; try { r.stop(); } catch {} res(''); }, ((+timeout) || 30) * 1000);
+        r.onresult = e => { if (done) return; done = true; clearTimeout(t); res(e.results[0][0].transcript); };
+        r.onerror = e => { if (done) return; done = true; clearTimeout(t); rej(new Error('STT: ' + e.error)); };
+        r.start();
+      });
+    },
+    async takePhoto() {
+      return new Promise((res, rej) => {
+        const i = document.createElement('input');
+        i.type = 'file'; i.accept = 'image/*'; i.capture = 'environment';
+        i.style.cssText = 'position:fixed;left:-9999px;top:-9999px';
+        i.addEventListener('change', () => {
+          const f = i.files && i.files[0]; i.remove();
+          if (!f) { rej(new Error('no photo taken')); return; }
+          const r = new FileReader();
+          r.onload = () => res({ dataUrl: r.result, type: f.type, size: f.size, name: f.name || 'photo.jpg' });
+          r.onerror = () => rej(new Error('photo read failed'));
+          r.readAsDataURL(f);
+        });
+        document.body.appendChild(i); i.click();
+        setTimeout(() => { try { i.remove(); } catch {} }, 5 * 60_000);
+      });
+    },
+    async notify(title, opts) {
+      if (!caps.notifications) throw new Error('Notifications not supported');
+      if (Notification.permission === 'default') {
+        const r = await Notification.requestPermission(); if (r !== 'granted') return false;
+      }
+      if (Notification.permission !== 'granted') return false;
+      try { const reg = await (navigator.serviceWorker && navigator.serviceWorker.getRegistration()); if (reg) await reg.showNotification(String(title), opts || {}); else new Notification(String(title), opts || {}); }
+      catch { new Notification(String(title), opts || {}); }
+      return true;
+    },
+    async badge(n) { if (!caps.badge) return false; const v = +n || 0; if (v <= 0) { if (navigator.clearAppBadge) await navigator.clearAppBadge(); } else { await navigator.setAppBadge(v); } return true; },
+    async persistStorage() { if (!caps.persistStorage) return false; return await navigator.storage.persist(); },
+    async wakeLock(enable) {
+      if (!caps.wakeLock) throw new Error('Wake Lock not supported');
+      if (enable === false) { if (_wakeLockHandle) { try { await _wakeLockHandle.release(); } catch {} _wakeLockHandle = null; } return false; }
+      if (_wakeLockHandle) return true;
+      _wakeLockHandle = await navigator.wakeLock.request('screen');
+      _wakeLockHandle.addEventListener('release', () => { _wakeLockHandle = null; });
+      return true;
+    },
+    vibrate(pattern) {
+      if (!caps.vibrate) return false;
+      let p = pattern;
+      if (p && typeof p.to_py === 'function') p = p.to_py();
+      if (p && typeof p === 'object' && 'length' in p) p = Array.from(p);
+      return navigator.vibrate(p == null ? 10 : p);
+    },
+  };
+  window.vb = window.vb || {};
+  window.vb.capabilities = caps;
+  window.vb.device = device;
+}
+
+// ── Run a single agent: write source to MEMFS, stamp env vars so
+//    utils.llm picks up our Copilot coords, then perform(). Awaits
+//    coroutine returns so async def perform(...) works. ──────────
+async function runAgent(card, parsed, kwargs) {
+  const py = await ensurePyodide();
+  installPairDeviceAPI();
+  py.FS.writeFile('/agents/' + card.filename, card.source);
+  const settings = readSettings() || {};
+  py.globals.set('_VB_CHAT_URL_JS', `${AUTH_WORKER_URL}/api/copilot/chat?endpoint=${encodeURIComponent(settings.copilotEndpoint || COPILOT_DEFAULT_API)}`);
+  py.globals.set('_VB_CHAT_TOKEN_JS', settings.copilotToken || '');
+  py.globals.set('_VB_DEFAULT_MODEL_JS', settings.model || 'gpt-4o');
+  py.runPython(`
+import os
+os.environ['_VB_CHAT_URL'] = _VB_CHAT_URL_JS
+os.environ['_VB_CHAT_TOKEN'] = _VB_CHAT_TOKEN_JS
+os.environ['_VB_DEFAULT_MODEL'] = _VB_DEFAULT_MODEL_JS
+import utils.llm
+`);
+  const className = parsed.className;
+  const modName = card.filename.replace(/\.py$/, '');
+  const argsJson = JSON.stringify(kwargs || {});
+  const script = `
+import json, importlib, inspect
+mod = importlib.import_module('agents.${modName}')
+importlib.reload(mod)
+agent = mod.${className}()
+agent.context = {'slush': {}}
+result = agent.perform(**json.loads(${JSON.stringify(argsJson)}))
+if inspect.iscoroutine(result):
+    result = await result
+result if isinstance(result, str) else json.dumps(result)
+`;
+  return String(await py.runPythonAsync(script));
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  Per-device LLM completion (now with tool-call loop)
+// ════════════════════════════════════════════════════════════════════
+
+function buildSystemPrompt(toolsXml) {
+  const me = state.role;
+  const other = me === 'host' ? 'guest' : 'host';
+  const myDevice = me === 'host'
+    ? 'a LAPTOP / DESKTOP browser. You typically have access to: full keyboard, larger screen, direct-from-IDE workflows. If your sibling brainstem on the phone is better suited (sensors, GPS, camera), say so and defer.'
+    : 'a PHONE / TABLET browser running as a PWA. You typically have access to: GPS, camera, microphone, accelerometer, push notifications, lock-screen badges. If the user wants heavy compute or shell access, defer to the laptop sibling.';
+  return `You are the ${me.toUpperCase()} brainstem in a paired group chat with another brainstem (the ${other}) and the human user.
+
+Context about you: you are running on ${myDevice}
+
+Conversation rules:
+- Reply in 1-3 short sentences. Be terse — the other brainstem may also reply.
+- If the user prefixes with @${other}, you stay silent (the messaging layer handles routing; if a message reached you, it's addressed to you).
+- If the user asks something the other brainstem is clearly better at, say so briefly and defer ("the ${other} should handle this — they have <capability>").
+- Never invent capabilities you don't have. You can't actually run subprocess on a phone; you can't actually access GPS on a desktop browser.
+- The other brainstem will see your reply too. Don't repeat what they're likely to say.
+${toolsXml || ''}`;
+}
+
+async function callCopilot(envelope, settings) {
+  const url = `${AUTH_WORKER_URL}/api/copilot/chat?endpoint=${encodeURIComponent(settings.copilotEndpoint || COPILOT_DEFAULT_API)}`;
+
+  // Tools = agents in this device's binder hand. Each device has its
+  // own hand (same-origin localStorage), so the host and the guest can
+  // expose different tool sets — that's part of the value: the laptop
+  // might have a "compile_rust" agent the phone doesn't, etc.
+  const tools = binderTools();
+  const handDescriptors = getHandCards();
+  const toolsXml = handDescriptors.length
+    ? '\n<loaded_tools>\n' + handDescriptors.map(({ parsed }) =>
+        `  <tool name="${parsed.name}">${escapeHtml((parsed.metadata && parsed.metadata.description) || '')}</tool>`
+      ).join('\n') + '\n</loaded_tools>'
+    : '';
+
+  // Conversation context: system prompt + last 12 turns from shared
+  // history, re-framed from this brainstem's POV (sibling replies are
+  // annotated as user messages so the model sees the full thread).
+  const tail = state.history.slice(-12);
+  const messages = [{ role: 'system', content: buildSystemPrompt(toolsXml) }];
+  for (const h of tail) {
+    if (h.kind === 'user') messages.push({ role: 'user', content: h.text });
+    else if (h.kind === 'assistant' && h.sender === state.role) messages.push({ role: 'assistant', content: h.text });
+    else if (h.kind === 'assistant') messages.push({ role: 'user', content: `[${h.sender} brainstem said:] ${h.text}` });
+  }
+  if (envelope && envelope.kind === 'user' && !tail.find(h => h.id === envelope.id)) {
+    messages.push({ role: 'user', content: envelope.text });
+  }
+
+  let safety = 4;
+  while (safety-- > 0) {
+    const body = {
+      model: settings.model || 'gpt-4o',
+      messages,
+      max_tokens: 320,
+      ...(tools.length ? { tools, tool_choice: 'auto' } : {}),
+    };
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'authorization': `Bearer ${settings.copilotToken}` },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const t = await r.text();
+      throw new Error(`HTTP ${r.status}: ${t.slice(0, 200)}`);
+    }
+    const data = await r.json();
+    const choice = data && data.choices && data.choices[0];
+    if (!choice) throw new Error('no choices in response');
+    const msg = choice.message;
+    messages.push(msg);
+
+    if (msg.tool_calls && msg.tool_calls.length) {
+      // Surface tool execution in the chat as a system note so both
+      // peers can see what's happening on this side. (Tool *output*
+      // stays internal — the user sees the post-tool assistant reply.)
+      for (const tc of msg.tool_calls) {
+        const fname = tc.function.name;
+        let args = {};
+        try { args = JSON.parse(tc.function.arguments || '{}'); } catch {}
+        const found = findCardByAgentName(fname);
+        if (!found) {
+          messages.push({ role: 'tool', tool_call_id: tc.id, name: fname,
+            content: JSON.stringify({ status: 'error', message: `agent '${fname}' is not in this brainstem's hand` }) });
+          continue;
+        }
+        appendSystemMsg(`${state.role === 'host' ? '💻' : '📱'} running tool: ${fname}`);
+        try {
+          const out = await runAgent(found.card, found.parsed, args);
+          messages.push({ role: 'tool', tool_call_id: tc.id, name: fname, content: out });
+        } catch (e) {
+          console.error('[pair] tool', fname, e);
+          messages.push({ role: 'tool', tool_call_id: tc.id, name: fname,
+            content: JSON.stringify({ status: 'error', message: String(e.message || e) }) });
+        }
+      }
+      continue;   // loop back so the model can use tool output
+    }
+
+    return (msg.content || '').trim() || '(empty reply)';
+  }
+  return '(stopped after 4 tool-call rounds)';
+}
+
+// ────────────────────────────────────────────────────────────────────
+//  Go.
+// ────────────────────────────────────────────────────────────────────
+boot().catch(e => {
+  console.error('[pair] boot failed:', e);
+  showError(e.message || String(e));
+});
+
+})();
+</script>
+
+</body>
+</html>

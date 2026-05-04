@@ -1,0 +1,44 @@
+{
+  "name": "RAPP Brainstem",
+  "short_name": "Brainstem",
+  "description": "Pocket agent runtime. Voice in, GPS aware, push-wakeable, local-first. Single-file Python agents in your phone's browser.",
+  "start_url": "./?source=pwa",
+  "id": "/web/",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "any",
+  "background_color": "#0d1117",
+  "theme_color": "#1f6feb",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-192.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon-512.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "New chat",
+      "short_name": "Chat",
+      "description": "Talk to the brainstem.",
+      "url": "./?source=pwa-shortcut&action=chat",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Voice in",
+      "short_name": "Voice",
+      "description": "Tap and speak — agent transcribes and replies.",
+      "url": "./?source=pwa-shortcut&action=voice",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Browse agents",
+      "short_name": "Agents",
+      "description": "Browse and install agents from the catalog.",
+      "url": "./?source=pwa-shortcut&action=browse",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "categories": ["productivity", "developer", "utilities"],
+  "lang": "en"
+}

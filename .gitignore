@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*~
+
+# Local runtime state — the console never commits these (they live in
+# the user's home dir at ~/.brainstem/data/, ~/.rapp/, etc.)
+data/
+.brainstem_data/
+.rapp/
+
+# Local secrets
+.env
+.env.local

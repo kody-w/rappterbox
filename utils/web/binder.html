@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAPP Binder — Rapplication Management</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:        #0d1117;
+    --panel:    #161b22;
+    --border:   #21262d;
+    --text:     #e6edf3;
+    --muted:    #8b949e;
+    --accent:   #58a6ff;
+    --accent-bg:#1f6feb;
+    --good:     #3fb950;
+    --good-bg:  #238636;
+    --warn:     #d29922;
+    --bad:      #f85149;
+    --bad-bg:   #da3633;
+    --card-bg:  #1c2128;
+    --skipped:  #6e7681;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* ── Header ────────────────────────────────────────── */
+  header {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex; align-items: center; gap: 16px;
+    position: sticky; top: 0; z-index: 10;
+  }
+  header h1 {
+    font-size: 16px; font-weight: 600;
+  }
+  header h1 .badge {
+    margin-left: 8px; font-size: 10px; letter-spacing: 1px;
+    color: var(--accent); border: 1px solid var(--accent-bg);
+    padding: 2px 8px; border-radius: 999px;
+    text-transform: uppercase; font-weight: 700;
+    vertical-align: middle;
+  }
+  header .endpoint {
+    margin-left: auto; font-size: 12px; color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, monospace;
+  }
+  header .endpoint input {
+    background: #0d1117; color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 4px 8px; font: inherit; width: 240px;
+  }
+  header button {
+    background: var(--accent-bg); color: white; border: 0;
+    padding: 6px 14px; border-radius: 6px; cursor: pointer;
+    font-size: 13px;
+  }
+  header button:hover { filter: brightness(1.15); }
+
+  /* ── Layout ────────────────────────────────────────── */
+  main {
+    max-width: 1280px; margin: 0 auto; padding: 24px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 24px;
+  }
+  @media (max-width: 920px) { main { grid-template-columns: 1fr; } }
+
+  section {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px;
+  }
+  section h2 {
+    font-size: 14px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--muted); margin-bottom: 16px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  section h2 .count {
+    background: var(--bg); border: 1px solid var(--border);
+    padding: 2px 10px; border-radius: 999px; font-size: 11px;
+    color: var(--accent);
+  }
+
+  /* ── Rapplication card ─────────────────────────────── */
+  .rapp {
+    background: var(--card-bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px; margin-bottom: 10px;
+    transition: border-color 0.15s;
+  }
+  .rapp:hover { border-color: #30363d; }
+  .rapp.installed { border-left: 3px solid var(--good); }
+  .rapp .head {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 6px;
+  }
+  .rapp .name {
+    font-weight: 600; font-size: 14px; color: var(--text);
+  }
+  .rapp .ver {
+    font-size: 11px; color: var(--muted);
+    font-family: ui-monospace, monospace;
+  }
+  .rapp .pub {
+    font-size: 11px; color: var(--accent);
+    background: rgba(88,166,255,0.1);
+    border: 1px solid rgba(88,166,255,0.3);
+    padding: 1px 6px; border-radius: 4px;
+  }
+  .rapp .summary {
+    font-size: 12px; color: var(--muted); line-height: 1.5;
+    margin: 6px 0 10px 0;
+  }
+  .rapp .meta {
+    display: flex; gap: 12px; font-size: 11px; color: var(--muted);
+    font-family: ui-monospace, monospace; flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .rapp .meta .pin { color: #6e7681; }
+  .rapp .actions { display: flex; gap: 8px; }
+  .rapp button {
+    background: transparent; color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 5px 12px; font-size: 12px; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .rapp button:hover { border-color: var(--accent); color: var(--accent); }
+  .rapp button.primary {
+    background: var(--accent-bg); border-color: var(--accent-bg);
+    color: white;
+  }
+  .rapp button.primary:hover { filter: brightness(1.15); color: white; }
+  .rapp button.danger {
+    color: var(--bad); border-color: rgba(248,81,73,0.3);
+  }
+  .rapp button.danger:hover { background: rgba(248,81,73,0.1); }
+  .rapp .installed-stamp {
+    font-size: 10px; color: var(--good);
+    margin-left: auto; font-family: ui-monospace, monospace;
+  }
+
+  /* Surface badges (UI / service / eggs) — show what's in each bundle. */
+  .rapp .surfaces {
+    display: flex; gap: 4px; flex-wrap: wrap; margin: 6px 0;
+  }
+  .rapp .surface {
+    font-size: 10px; padding: 1px 7px; border-radius: 999px;
+    text-transform: uppercase; letter-spacing: .5px; font-weight: 700;
+    font-family: ui-monospace, monospace;
+  }
+  .rapp .surface.ui   { background: rgba(88,166,255,.12); color: var(--accent); }
+  .rapp .surface.svc  { background: rgba(63,185,80,.12);  color: var(--good); }
+  .rapp .surface.eggs { background: rgba(188,140,255,.12); color: #bc8cff; }
+  .rapp .surface.cat  { background: rgba(210,153,34,.12); color: var(--warn); }
+  .rapp .surface.tier { background: rgba(255,215,0,.12); color: #ffd700; }
+  .rapp .surface.tier.community { background: var(--border); color: var(--muted); }
+  .rapp .surface.tier.experimental { background: rgba(210,153,34,.12); color: var(--warn); }
+
+  /* Catalog meta line — generated_at + source link */
+  .catalog-meta {
+    font-size: 11px; color: var(--muted);
+    font-family: ui-monospace, monospace;
+    margin-top: -8px; margin-bottom: 12px;
+  }
+  .catalog-meta a { color: var(--accent); }
+
+  /* Sibling-surface links in header */
+  header .siblings {
+    display: flex; gap: 10px; margin-right: 14px; font-size: 12px;
+  }
+  header .siblings a {
+    color: var(--muted); text-decoration: none;
+  }
+  header .siblings a:hover { color: var(--accent); }
+  header .siblings a strong { color: var(--text); }
+
+  /* ── Run modal ─────────────────────────────────────── */
+  #modal {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6); z-index: 50;
+    align-items: center; justify-content: center;
+  }
+  #modal.show { display: flex; }
+  #modal .box {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 24px;
+    width: 90%; max-width: 700px; max-height: 90vh; overflow: auto;
+  }
+  #modal h3 { margin-bottom: 12px; }
+  #modal label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 4px 0; }
+  #modal textarea, #modal input, #modal select {
+    width: 100%; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 8px 10px; font: inherit; font-family: ui-monospace, monospace;
+    font-size: 13px;
+  }
+  #modal textarea { min-height: 120px; resize: vertical; }
+  #modal .actions { display: flex; gap: 10px; margin-top: 16px; justify-content: flex-end; }
+  #modal pre {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 12px; margin-top: 12px;
+    font-family: ui-monospace, monospace; font-size: 12px;
+    overflow: auto; max-height: 400px; white-space: pre-wrap;
+  }
+
+  /* ── Status bar ────────────────────────────────────── */
+  .status {
+    position: fixed; bottom: 16px; right: 16px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px;
+    font-size: 12px; color: var(--muted);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    transition: opacity 0.3s; opacity: 0;
+  }
+  .status.show { opacity: 1; }
+  .status.ok { color: var(--good); border-color: rgba(63,185,80,0.4); }
+  .status.bad { color: var(--bad); border-color: rgba(248,81,73,0.4); }
+
+  .empty {
+    text-align: center; padding: 24px; color: var(--muted);
+    font-size: 13px; font-style: italic;
+  }
+  .loading { padding: 24px; text-align: center; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📒 RAPP Binder<span class="badge">v1.9</span></h1>
+  <div class="siblings">
+    <a href="https://github.com/kody-w/RAPP_Store" target="_blank">store ↗</a>
+    <a href="https://github.com/kody-w/RAR" target="_blank">RAR (bare agents) ↗</a>
+  </div>
+  <div class="endpoint">
+    brainstem:
+    <!-- Default to the origin that served this page — when this is opened
+         from the local brainstem at localhost:7071, the binder talks to
+         that same instance. User can override to point at a different
+         brainstem if desired. -->
+    <input id="endpoint" value="" />
+  </div>
+  <button onclick="reload()">↻ Reload</button>
+</header>
+
+<div id="banner" style="display:none; background:#5a3d11; color:#ffe7b3;
+     border-bottom:1px solid #d29922; padding:10px 24px; font-size:13px;">
+</div>
+
+<main>
+  <!-- ── INSTALLED ──────────────────────────────── -->
+  <section>
+    <h2>
+      Installed for this twin
+      <span class="count" id="installed-count">0</span>
+    </h2>
+    <div id="installed">
+      <div class="loading">Loading binder…</div>
+    </div>
+  </section>
+
+  <!-- ── CATALOG ──────────────────────────────── -->
+  <section>
+    <h2>
+      Catalog (RAPPstore)
+      <span class="count" id="catalog-count">0</span>
+    </h2>
+    <div id="catalog">
+      <div class="loading">Loading catalog…</div>
+    </div>
+  </section>
+</main>
+
+<!-- ── Run modal ──────────────────────────────── -->
+<div id="modal" onclick="if(event.target.id==='modal')closeModal()">
+  <div class="box">
+    <h3 id="modal-title">Run rapplication</h3>
+    <p style="font-size: 12px; color: var(--muted); margin-bottom: 12px;">
+      POSTs to <code>/api/binder/agent</code> with the args below.
+      The brainstem hot-loads the singleton from <code>&lt;root&gt;/agents/</code> and runs it in-process — no swarm GUID needed.
+    </p>
+    <label>Agent name</label>
+    <input id="run-agent" value="MomentFactory" />
+    <label>Args (JSON)</label>
+    <textarea id="run-args">{
+  "source": "Voice memo, half-asleep: I just realized BookFactory and MomentFactory have the same shape. The persona with veto power makes the pipeline a society, not a chain.",
+  "source_type": "voice-memo"
+}</textarea>
+    <div class="actions">
+      <button onclick="closeModal()">Cancel</button>
+      <button class="primary" id="run-btn" onclick="runAgent()">▶ Run</button>
+    </div>
+    <pre id="run-output" style="display:none"></pre>
+  </div>
+</div>
+
+<div class="status" id="status"></div>
+
+<script>
+  const $ = sel => document.querySelector(sel);
+  let CATALOG = null;
+  let BINDER = null;
+
+  function status(msg, kind = 'info') {
+    const el = $('#status');
+    el.textContent = msg;
+    el.className = 'status show ' + (kind === 'ok' ? 'ok' : kind === 'bad' ? 'bad' : '');
+    setTimeout(() => el.classList.remove('show'), 3000);
+  }
+
+  function endpoint() { return $('#endpoint').value.replace(/\/$/, ''); }
+
+  // If the page is loaded from https:// (e.g. GitHub Pages) but the brainstem
+  // endpoint is http://, the browser will block the fetch as mixed content.
+  // Detect that up front and surface it instead of hanging on "Loading…".
+  function mixedContentBlocked() {
+    return window.location.protocol === 'https:' && endpoint().startsWith('http:');
+  }
+
+  async function api(path, opts = {}) {
+    if (mixedContentBlocked()) {
+      return { status: 0, json: { _mixed_content: true,
+        message: "Browsers block https→http requests. Open this page from your "
+                 + "local brainstem instead: " + endpoint() + "/binder.html" } };
+    }
+    try {
+      const r = await fetch(endpoint() + path, {
+        headers: { 'Content-Type': 'application/json' },
+        ...opts,
+      });
+      const text = await r.text();
+      try { return { status: r.status, json: JSON.parse(text) }; }
+      catch { return { status: r.status, json: { _raw: text } }; }
+    } catch (err) {
+      return { status: 0, json: { _network: true,
+        message: "Cannot reach " + endpoint() + " — is the brainstem running? "
+                 + "Try: brainstem start  (or: python3 rapp_brainstem/brainstem.py)" } };
+    }
+  }
+
+  async function loadBinder() {
+    const r = await api('/api/binder');
+    if (r.status !== 200) {
+      const msg = (r.json && r.json.message) || 'Brainstem unreachable.';
+      $('#installed').innerHTML =
+        `<div class="empty">${esc(msg)}</div>`;
+      return;
+    }
+    BINDER = r.json;
+    renderInstalled();
+  }
+
+  async function loadCatalog() {
+    const r = await api('/api/binder/catalog');
+    if (r.status !== 200) {
+      const msg = (r.json && r.json.message) || 'Catalog unreachable.';
+      $('#catalog').innerHTML = `<div class="empty">${esc(msg)}</div>`;
+      return;
+    }
+    CATALOG = r.json;
+    renderCatalog();
+  }
+
+  function isInstalled(id) {
+    return BINDER && (BINDER.installed || []).some(e => e.id === id);
+  }
+
+  function renderInstalled() {
+    const list = (BINDER && BINDER.installed) || [];
+    $('#installed-count').textContent = list.length;
+    if (list.length === 0) {
+      $('#installed').innerHTML =
+        `<div class="empty">No rapplications installed.<br>
+         Click <b>Install</b> on a catalog entry to materialize one.</div>`;
+      return;
+    }
+    $('#installed').innerHTML = list.map(e => {
+      // Cross-reference the catalog so installed cards show the same surface
+      // / category / tier badges as catalog cards — same shape, both columns.
+      const cat = (CATALOG && CATALOG.rapplications || []).find(r => r.id === e.id) || {};
+      const surf = surfaces(cat);
+      return `
+      <div class="rapp installed">
+        <div class="head">
+          <span class="name">${esc(e.id)}</span>
+          <span class="pub">${esc(e.publisher || cat.publisher || 'unknown')}</span>
+          <span class="ver">v${esc(e.version || '?')}</span>
+          <span class="installed-stamp">✓ installed</span>
+        </div>
+        ${(cat.category || surf.length || cat.quality_tier) ? `
+        <div class="surfaces">
+          ${cat.category ? `<span class="surface cat">${esc(cat.category)}</span>` : ''}
+          ${cat.quality_tier ? `<span class="surface tier ${esc(cat.quality_tier)}">${esc(cat.quality_tier)}</span>` : ''}
+          ${surf.map(s => `<span class="surface ${s.kind}">${s.label}</span>`).join('')}
+        </div>` : ''}
+        <div class="meta">
+          <span><span class="pin">file:</span> ${esc(e.singleton_filename)}</span>
+          <span><span class="pin">sha:</span> ${esc((e.singleton_sha256 || '').slice(0, 12))}…</span>
+          <span><span class="pin">at:</span> ${fmtTime(e.installed_at)}</span>
+        </div>
+        <div class="actions">
+          <button class="primary" onclick='openRunModal(${JSON.stringify(JSON.stringify(e))})'>▶ Run</button>
+          <button class="danger" onclick='uninstall(${JSON.stringify(e.id)})'>Uninstall</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // Post-Proposal-0001 the rapp_store catalog is bundles only (Constitution
+  // Article XXVII). Sub-agents that used to clutter the list now live in
+  // kody-w/RAR. We still ignore anything that lacks a singleton URL — those
+  // are service-only rapps that need a bigger install path than this UI
+  // surfaces, OR malformed entries.
+  function isRapplication(r) {
+    return !!(r.singleton_url || r.service_url);
+  }
+
+  // What surfaces does this rapp ship? Drives the badges shown on each card
+  // so the user sees "this one has a UI, that one is a service" at a glance.
+  function surfaces(r) {
+    const out = [];
+    if (r.ui_url) out.push({ kind: 'ui', label: 'UI' });
+    if (r.service_url) out.push({ kind: 'svc', label: 'service' });
+    if (r.egg_url) out.push({ kind: 'eggs', label: 'eggs' });
+    return out;
+  }
+
+  function renderCatalog() {
+    const all = (CATALOG && CATALOG.rapplications) || [];
+    const list = all.filter(isRapplication);
+    $('#catalog-count').textContent = list.length;
+
+    // Catalog meta line: when was this generated? Where did it come from?
+    const metaParts = [];
+    if (CATALOG && CATALOG.generated_at) metaParts.push('updated ' + CATALOG.generated_at.replace('T', ' ').replace('Z', ' UTC'));
+    if (CATALOG && CATALOG.schema) metaParts.push(CATALOG.schema);
+    const metaHTML = metaParts.length
+      ? `<div class="catalog-meta">${esc(metaParts.join(' · '))} · <a href="https://github.com/kody-w/RAPP_Store" target="_blank">source ↗</a></div>`
+      : '';
+
+    if (list.length === 0) {
+      $('#catalog').innerHTML = metaHTML + `<div class="empty">Catalog is empty.</div>`;
+      return;
+    }
+    $('#catalog').innerHTML = metaHTML + list.map(r => {
+      const installed = isInstalled(r.id);
+      const surf = surfaces(r);
+      const tier = r.quality_tier || '';
+      return `
+      <div class="rapp ${installed ? 'installed' : ''}">
+        <div class="head">
+          <span class="name">${esc(r.id)}</span>
+          <span class="pub">${esc(r.publisher || '@kody.cloud')}</span>
+          <span class="ver">v${esc(r.version || '?')}</span>
+          ${installed ? '<span class="installed-stamp">✓ installed</span>' : ''}
+        </div>
+        <div class="surfaces">
+          ${r.category ? `<span class="surface cat">${esc(r.category)}</span>` : ''}
+          ${tier ? `<span class="surface tier ${esc(tier)}">${esc(tier)}</span>` : ''}
+          ${surf.map(s => `<span class="surface ${s.kind}">${s.label}</span>`).join('')}
+        </div>
+        <div class="summary">${esc((r.summary || '').slice(0, 240))}${(r.summary || '').length > 240 ? '…' : ''}</div>
+        <div class="meta">
+          <span><span class="pin">manifest:</span> ${esc(r.manifest_name || r.id || '?')}</span>
+          ${r.singleton_lines ? `<span><span class="pin">lines:</span> ${r.singleton_lines}</span>` : ''}
+          ${r.singleton_bytes ? `<span><span class="pin">size:</span> ${(r.singleton_bytes/1024).toFixed(1)}KB</span>` : ''}
+        </div>
+        <div class="actions">
+          ${installed
+            ? `<button class="danger" onclick='uninstall(${JSON.stringify(r.id)})'>Uninstall</button>`
+            : `<button class="primary" onclick='install(${JSON.stringify(r.id)})'>Install</button>`}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  async function install(id) {
+    status(`Installing ${id}…`);
+    const r = await api('/api/binder/install', {
+      method: 'POST', body: JSON.stringify({ id }),
+    });
+    if (r.status === 200) {
+      status(`Installed ${id} → ${r.json.installed_to}`, 'ok');
+      await reload();
+    } else {
+      status(`Install failed: ${r.json.message || 'unknown error'}`, 'bad');
+    }
+  }
+
+  async function uninstall(id) {
+    if (!confirm(`Uninstall ${id}? This removes the file from <root>/agents/.`)) return;
+    const r = await api('/api/binder/installed/' + encodeURIComponent(id), { method: 'DELETE' });
+    if (r.status === 200) {
+      status(`Uninstalled ${id}`, 'ok');
+      await reload();
+    } else {
+      status(`Uninstall failed: ${r.json.message || 'unknown error'}`, 'bad');
+    }
+  }
+
+  function openRunModal(entryStr) {
+    const e = JSON.parse(JSON.parse(entryStr));  // double-encoded for HTML attr safety
+    $('#modal-title').textContent = `Run ${e.id}`;
+    // Default agent name from manifest_name (e.g. @rapp/moment-factory-singleton → MomentFactory)
+    const guess = (e.manifest_name || '').split('/').pop()
+      .replace('-singleton', '').replace(/-/g, ' ')
+      .replace(/\b\w/g, c => c.toUpperCase()).replace(/\s/g, '');
+    $('#run-agent').value = guess || 'Agent';
+    $('#run-output').style.display = 'none';
+    $('#modal').classList.add('show');
+  }
+  function closeModal() { $('#modal').classList.remove('show'); }
+
+  async function runAgent() {
+    const name = $('#run-agent').value.trim();
+    let args;
+    try { args = JSON.parse($('#run-args').value); }
+    catch (e) { status('Invalid JSON: ' + e.message, 'bad'); return; }
+
+    const btn = $('#run-btn');
+    btn.disabled = true; btn.textContent = '⏳ Running…';
+    const t0 = Date.now();
+
+    const r = await api('/api/binder/agent', {
+      method: 'POST', body: JSON.stringify({ name, args }),
+    });
+
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+    btn.disabled = false; btn.textContent = '▶ Run';
+
+    const out = $('#run-output');
+    out.style.display = 'block';
+    if (r.status === 200 && r.json.output) {
+      // The agent's output is a JSON-as-string envelope; pretty-print if parseable
+      let pretty = r.json.output;
+      try { pretty = JSON.stringify(JSON.parse(r.json.output), null, 2); } catch {}
+      out.textContent = `✓ ${elapsed}s\n\n${pretty}`;
+      status(`Ran ${name} in ${elapsed}s`, 'ok');
+    } else {
+      out.textContent = JSON.stringify(r.json, null, 2);
+      status(`Run failed`, 'bad');
+    }
+  }
+
+  function checkContext() {
+    const banner = $('#banner');
+    if (mixedContentBlocked()) {
+      banner.style.display = 'block';
+      banner.innerHTML = '⚠ This page was opened over HTTPS, but the brainstem '
+        + 'endpoint is HTTP. Browsers block these requests as <em>mixed content</em>. '
+        + 'Open this page from your local brainstem instead: '
+        + '<a style="color:#ffd680" href="' + endpoint() + '/binder.html">'
+        + endpoint() + '/binder.html</a>';
+      return false;
+    }
+    banner.style.display = 'none';
+    return true;
+  }
+
+  async function reload() {
+    checkContext();
+    await Promise.all([loadCatalog(), loadBinder()]);
+  }
+
+  function esc(s) { return String(s ?? '').replace(/[<>&"']/g, c =>
+    ({ '<':'&lt;', '>':'&gt;', '&':'&amp;', '"':'&quot;', "'":'&#39;' }[c])); }
+  function fmtTime(s) { if (!s) return '—'; try { return new Date(s).toLocaleString(); } catch { return s; } }
+
+  // Default the brainstem URL to the origin that served this page —
+  // when opened from the local brainstem at localhost:7071, the binder
+  // talks to that same instance instead of the now-stale 7080 default.
+  // Falls back to localhost:7071 if the page somehow has no origin
+  // (e.g. opened via file://).
+  (function defaultEndpoint(){
+    const input = document.getElementById('endpoint');
+    if (!input) return;
+    const origin = (window.location && window.location.origin && window.location.origin !== 'null')
+      ? window.location.origin
+      : 'http://localhost:7071';
+    input.value = origin;
+  })();
+
+  reload();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>The Twin Stack — Hatch Your Digital Twin</title>
+<meta name="description" content="Local-first digital-twin onboarding. Pick a pre-configured cloud, hatch on your device, and let it live across your tether estate.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2358a6ff'%3E%3Cpath d='M12 2a5 5 0 015 5v3h2a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2v-9a2 2 0 012-2h2V7a5 5 0 015-5zm0 2a3 3 0 00-3 3v3h6V7a3 3 0 00-3-3z'/%3E%3C/svg%3E">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  header {
+    padding: 14px 24px;
+    border-bottom: 1px solid #21262d;
+    display: flex; align-items: center; gap: 12px;
+    background: #161b22; position: sticky; top: 0; z-index: 30;
+  }
+  header .logo {
+    width: 28px; height: 28px; border-radius: 6px; background: #1f6feb;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700; font-size: 16px;
+  }
+  header h1 { font-size: 16px; font-weight: 600; }
+  header h1 .badge {
+    margin-left: 8px; font-size: 9px; letter-spacing: 1.5px;
+    color: #58a6ff; vertical-align: middle;
+    border: 1px solid #1f6feb; padding: 2px 7px; border-radius: 999px;
+    text-transform: uppercase; font-weight: 700;
+  }
+  header .controls { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 12px; }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 32px 24px 80px; }
+  .hero {
+    border: 1px solid #21262d; border-radius: 14px; padding: 26px 28px;
+    background: linear-gradient(135deg, rgba(31,111,235,.10), rgba(63,185,80,.05));
+    margin-bottom: 32px;
+  }
+  .hero h2 { font-size: 28px; margin-bottom: 10px; }
+  .hero p { color: #8b949e; margin-bottom: 14px; max-width: 760px; }
+  .hero .stack-name {
+    color: #58a6ff; font-family: "SF Mono", ui-monospace, monospace;
+    font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px;
+  }
+
+  .layers { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; margin-top: 16px; }
+  .layer {
+    background: #161b22; border: 1px solid #21262d; border-radius: 8px;
+    padding: 10px 12px; font-size: 12px;
+  }
+  .layer .tag { color: #58a6ff; font-family: "SF Mono", monospace; font-weight: 700; font-size: 11px; }
+  .layer .desc { color: #8b949e; margin-top: 4px; }
+
+  .section-h {
+    font-size: 13px; color: #8b949e; text-transform: uppercase; letter-spacing: 1.5px;
+    margin: 36px 0 14px; font-weight: 600;
+  }
+
+  /* Identity card */
+  #identity {
+    border: 1px solid #21262d; border-radius: 12px; padding: 16px 18px; background: #161b22;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 24px;
+  }
+  #identity .avatar {
+    width: 44px; height: 44px; border-radius: 10px; background: #1f6feb;
+    display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700;
+  }
+  #identity .who { flex: 1; min-width: 220px; }
+  #identity .handle { font-family: "SF Mono", monospace; font-size: 13px; color: #58a6ff; }
+  #identity .cloud-id { font-family: "SF Mono", monospace; font-size: 11px; color: #6e7681; word-break: break-all; }
+  #identity input {
+    background: #0d1117; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px;
+    padding: 6px 10px; font-size: 12px; font-family: "SF Mono", monospace; outline: none;
+    min-width: 220px;
+  }
+  #identity input:focus { border-color: #1f6feb; }
+
+  /* Endpoint */
+  #endpoint-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  #endpoint-row label { color: #8b949e; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+  #endpoint-row input { flex: 1; min-width: 240px; }
+  .endpoint-status { font-size: 11px; color: #8b949e; font-family: "SF Mono", monospace; }
+  .endpoint-status.ok { color: #3fb950; }
+  .endpoint-status.bad { color: #f85149; }
+
+  /* Cloud cards grid */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+  .cloud {
+    background: #161b22; border: 1px solid #21262d; border-radius: 12px;
+    padding: 18px 20px; display: flex; flex-direction: column; gap: 10px;
+    transition: border-color .15s, transform .15s;
+    cursor: pointer;
+  }
+  .cloud:hover { border-color: #58a6ff; transform: translateY(-2px); }
+  .cloud .head { display: flex; align-items: center; gap: 10px; }
+  .cloud .icon { font-size: 22px; }
+  .cloud .name { font-weight: 600; font-size: 14px; }
+  .cloud .handle { font-family: "SF Mono", monospace; font-size: 11px; color: #58a6ff; margin-top: 2px; }
+  .cloud .tagline { color: #c9d1d9; font-size: 13px; font-style: italic; }
+  .cloud .for { color: #8b949e; font-size: 12px; }
+  .cloud .meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .pill {
+    font-size: 10px; color: #8b949e; background: #0d1117;
+    border: 1px solid #30363d; border-radius: 999px;
+    padding: 2px 8px; font-family: "SF Mono", monospace;
+  }
+  .pill.specific { color: #f0b66f; border-color: #835a2b; background: rgba(240,182,111,.06); }
+
+  /* Detail modal */
+  .modal-bg {
+    position: fixed; inset: 0; background: rgba(0,0,0,.7);
+    display: none; align-items: flex-start; justify-content: center;
+    z-index: 100; padding: 32px 16px; overflow-y: auto;
+  }
+  .modal-bg.open { display: flex; }
+  .modal {
+    background: #161b22; border: 1px solid #30363d; border-radius: 14px;
+    width: 100%; max-width: 760px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.6);
+  }
+  .modal-head {
+    padding: 18px 22px; border-bottom: 1px solid #21262d;
+    display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  }
+  .modal-head h3 { font-size: 18px; }
+  .modal-head h3 small { color: #8b949e; font-weight: normal; font-size: 13px; margin-left: 8px; }
+  .modal-head .close {
+    background: none; border: none; color: #8b949e; font-size: 22px; cursor: pointer;
+    line-height: 1; padding: 0 4px;
+  }
+  .modal-head .close:hover { color: #e6edf3; }
+  .modal-body { padding: 18px 22px; }
+  .modal-body h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; color: #8b949e; margin: 14px 0 8px; }
+  .modal-body h4:first-child { margin-top: 0; }
+  .modal-body .swarm-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+  .modal-body .swarm-item {
+    background: #0d1117; border: 1px solid #21262d; border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .modal-body .swarm-item .nm { font-weight: 600; font-size: 13px; color: #58a6ff; font-family: "SF Mono", monospace; }
+  .modal-body .swarm-item .ds { font-size: 11px; color: #8b949e; margin-top: 4px; }
+  .modal-body .estate-list, .modal-body .demo {
+    background: #0d1117; border: 1px solid #21262d; border-radius: 8px;
+    padding: 10px 12px; font-size: 12px;
+  }
+  .modal-body .demo { color: #c9d1d9; font-style: italic; }
+  .modal-body .estate-list .row {
+    display: flex; gap: 8px; padding: 4px 0; border-bottom: 1px dashed #21262d;
+  }
+  .modal-body .estate-list .row:last-child { border-bottom: none; }
+  .modal-body .estate-list .dev { font-weight: 600; min-width: 160px; color: #c9d1d9; }
+  .modal-body .estate-list .pp { color: #8b949e; flex: 1; }
+  .modal-body .estate-list .te { color: #58a6ff; font-family: "SF Mono", monospace; font-size: 11px; min-width: 180px; }
+
+  pre.soul-block {
+    background: #0d1117; border: 1px solid #21262d; border-radius: 8px;
+    padding: 10px 12px; font-family: "SF Mono", monospace; font-size: 11px;
+    color: #c9d1d9; max-height: 240px; overflow-y: auto; white-space: pre-wrap;
+  }
+
+  .modal-foot {
+    padding: 16px 22px; border-top: 1px solid #21262d;
+    display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap;
+  }
+  .btn {
+    background: #21262d; border: 1px solid #30363d; color: #e6edf3;
+    padding: 8px 14px; border-radius: 6px; font-size: 13px; cursor: pointer;
+    font-family: inherit; transition: all .15s;
+  }
+  .btn:hover { border-color: #58a6ff; color: #58a6ff; }
+  .btn.primary { background: #238636; border-color: #2ea043; color: #fff; }
+  .btn.primary:hover { background: #2ea043; color: #fff; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+  /* Demo prompts */
+  .prompts { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+  .prompt {
+    background: #161b22; border: 1px solid #21262d; border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .prompt .num { color: #f0b66f; font-family: "SF Mono", monospace; font-size: 11px; font-weight: 700; }
+  .prompt .ttl { font-size: 14px; font-weight: 600; margin-top: 4px; }
+  .prompt .scn { color: #8b949e; font-size: 12px; margin-top: 4px; }
+  .prompt .pmt {
+    background: #0d1117; border: 1px solid #21262d; border-radius: 6px;
+    padding: 8px 10px; font-size: 11px; color: #c9d1d9; margin-top: 8px; font-style: italic;
+    max-height: 110px; overflow: hidden; position: relative; cursor: pointer;
+  }
+  .prompt .pmt:hover { border-color: #58a6ff; }
+  .prompt .pmt.expanded { max-height: none; }
+
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: #161b22; color: #e6edf3; border: 1px solid #30363d;
+    padding: 10px 16px; border-radius: 8px; font-size: 13px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.4); z-index: 200;
+    opacity: 0; transition: opacity .25s;
+  }
+  .toast.show { opacity: 1; }
+  .toast.ok { border-color: #2ea043; }
+  .toast.bad { border-color: #f85149; }
+
+  .empty {
+    color: #8b949e; font-size: 13px; padding: 20px; text-align: center;
+    border: 1px dashed #30363d; border-radius: 8px;
+  }
+  .loading { color: #8b949e; font-size: 13px; padding: 20px; }
+
+  /* Hatched-swarm cards */
+  .hatched-card {
+    background: #0d1117; border: 1px solid #2ea043; border-radius: 10px;
+    padding: 12px 14px; display: flex; align-items: center; gap: 10px;
+    transition: border-color .15s;
+  }
+  .hatched-card:hover { border-color: #3fb950; }
+  .hatched-card .nm { font-weight: 600; font-size: 13px; flex: 1; }
+  .hatched-card .gd { font-family: "SF Mono", monospace; font-size: 10px; color: #6e7681; }
+  .hatched-card .ag { font-size: 11px; color: #8b949e; }
+  .hatched-card button {
+    background: #21262d; border: 1px solid #30363d; color: #e6edf3;
+    padding: 6px 10px; border-radius: 6px; font-size: 12px; cursor: pointer;
+  }
+  .hatched-card button.primary { background: #238636; border-color: #2ea043; color: #fff; }
+  .hatched-card button.primary:hover { background: #2ea043; }
+  .hatched-card button.danger { color: #f85149; }
+  .hatched-card button.danger:hover { border-color: #f85149; }
+
+  /* Chat drawer */
+  .chat-drawer-bg {
+    position: fixed; inset: 0; background: rgba(0,0,0,.7);
+    display: none; z-index: 150; align-items: stretch; justify-content: flex-end;
+  }
+  .chat-drawer-bg.open { display: flex; }
+  .chat-drawer {
+    background: #161b22; border-left: 1px solid #30363d;
+    width: 100%; max-width: 520px; display: flex; flex-direction: column;
+    box-shadow: -8px 0 32px rgba(0,0,0,.5);
+  }
+  .chat-head {
+    padding: 14px 18px; border-bottom: 1px solid #21262d;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .chat-head .who { flex: 1; }
+  .chat-head .nm { font-weight: 600; font-size: 14px; }
+  .chat-head .gd { font-family: "SF Mono", monospace; font-size: 10px; color: #6e7681; }
+  .chat-head .provider {
+    font-size: 10px; color: #f0b66f; font-family: "SF Mono", monospace;
+    border: 1px solid #835a2b; border-radius: 999px; padding: 2px 8px;
+  }
+  .chat-head .close {
+    background: none; border: none; color: #8b949e; font-size: 22px;
+    cursor: pointer; padding: 0 4px;
+  }
+  .chat-head .close:hover { color: #e6edf3; }
+  .chat-log {
+    flex: 1; overflow-y: auto; padding: 16px 18px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .chat-msg {
+    max-width: 90%; padding: 10px 14px; border-radius: 10px;
+    font-size: 13px; line-height: 1.5; white-space: pre-wrap;
+  }
+  .chat-msg.user { align-self: flex-end; background: #1f6feb; color: #fff; }
+  .chat-msg.assistant { align-self: flex-start; background: #21262d; }
+  .chat-msg.tool {
+    align-self: flex-start; background: #0d1117; border: 1px dashed #30363d;
+    color: #8b949e; font-family: "SF Mono", monospace; font-size: 11px;
+    max-width: 100%;
+  }
+  .chat-msg .voice {
+    margin-top: 6px; padding-top: 6px; border-top: 1px dashed #30363d;
+    font-style: italic; color: #f0b66f; font-size: 11px;
+  }
+  .chat-input-row {
+    border-top: 1px solid #21262d; padding: 12px 14px;
+    display: flex; gap: 8px;
+  }
+  .chat-input-row textarea {
+    flex: 1; resize: none; min-height: 44px; max-height: 140px;
+    background: #0d1117; color: #e6edf3; border: 1px solid #30363d;
+    border-radius: 8px; padding: 10px 12px; font-family: inherit; font-size: 13px;
+    outline: none;
+  }
+  .chat-input-row textarea:focus { border-color: #1f6feb; }
+  .chat-input-row button {
+    background: #238636; border: 1px solid #2ea043; color: #fff;
+    border-radius: 8px; padding: 0 16px; cursor: pointer; font-family: inherit;
+    font-size: 13px;
+  }
+  .chat-input-row button:disabled { opacity: .5; cursor: not-allowed; }
+  .chat-status {
+    padding: 6px 18px; font-size: 11px; color: #8b949e;
+    font-family: "SF Mono", monospace;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">⌘</div>
+  <h1>The Twin Stack <span class="badge">hatch</span></h1>
+  <div class="controls">
+    <a href="../index.html" title="Back to brainstem">← brainstem</a>
+    <a href="../../index.html" title="RAPP root">RAPP</a>
+    <a href="../../blog/index.md" title="Field notes">blog</a>
+  </div>
+</header>
+
+<main>
+
+<section class="hero">
+  <div class="stack-name" id="hero-stack">The Twin Stack · v1.0</div>
+  <h2 id="hero-title">Hatch your digital twin. Local-first. Yours forever.</h2>
+  <p id="hero-desc">Loading registry…</p>
+  <div class="layers" id="layers"></div>
+</section>
+
+<div class="section-h">Your identity</div>
+<div id="identity">
+  <div class="avatar" id="ident-avatar">?</div>
+  <div class="who">
+    <div class="handle" id="ident-handle">@unhatched</div>
+    <div class="cloud-id" id="ident-cloudid">— hatch your twin to mint a cloud_id —</div>
+  </div>
+  <input type="text" id="ident-input" placeholder="@your.handle" autocomplete="off">
+  <button class="btn primary" id="hatch-btn">🥚 Hatch</button>
+</div>
+
+<div class="section-h">Local twin runtime</div>
+<div id="identity">
+  <div id="endpoint-row" style="width:100%">
+    <label>Endpoint</label>
+    <input type="text" id="endpoint" value="http://127.0.0.1:7080" autocomplete="off" spellcheck="false">
+    <button class="btn" id="probe-btn">probe</button>
+    <span class="endpoint-status" id="endpoint-status">unprobed</span>
+  </div>
+</div>
+
+<div class="section-h" id="hero-section-h">Hero clouds — specific humans</div>
+<div class="grid" id="hero-grid"><div class="loading">Loading…</div></div>
+
+<div class="section-h">Hatched on this endpoint</div>
+<div class="grid" id="hatched-grid"><div class="empty">No swarms hatched here yet. Pick a hero cloud below and push it.</div></div>
+
+<div class="section-h">Hero clouds — role twins</div>
+<div class="grid" id="role-grid"><div class="loading">Loading…</div></div>
+
+<div class="section-h">10 prompts that show off the Stack</div>
+<div class="prompts" id="prompts"><div class="loading">Loading…</div></div>
+
+<div class="section-h">Tether estate</div>
+<div class="layer" id="tether-blurb" style="font-size: 13px; line-height: 1.6;">
+  Loading…
+</div>
+
+</main>
+
+<!-- Chat drawer -->
+<div class="chat-drawer-bg" id="chat-bg">
+  <div class="chat-drawer">
+    <div class="chat-head">
+      <div class="who">
+        <div class="nm" id="chat-name">—</div>
+        <div class="gd" id="chat-guid">—</div>
+      </div>
+      <span class="provider" id="chat-provider">—</span>
+      <button class="close" id="chat-close">×</button>
+    </div>
+    <div class="chat-status" id="chat-status">Ready.</div>
+    <div class="chat-log" id="chat-log"></div>
+    <div class="chat-input-row">
+      <textarea id="chat-input" placeholder="Ask your twin… (Enter to send, Shift+Enter for newline)"></textarea>
+      <button id="chat-send">Send</button>
+    </div>
+  </div>
+</div>
+
+<!-- Detail modal -->
+<div class="modal-bg" id="modal-bg">
+  <div class="modal" id="modal">
+    <div class="modal-head">
+      <h3 id="m-title">—</h3>
+      <button class="close" id="m-close">×</button>
+    </div>
+    <div class="modal-body" id="m-body"></div>
+    <div class="modal-foot">
+      <button class="btn" id="m-download">⬇ Download bundle</button>
+      <button class="btn" id="m-copy">📋 Copy bundle JSON</button>
+      <button class="btn primary" id="m-push">🚀 Push to endpoint</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+
+const REGISTRY_URL = 'registry.json';
+const STORAGE_IDENT = 'twinstack.identity.v1';
+const STORAGE_ENDPOINT = 'twinstack.endpoint.v1';
+
+let REGISTRY = null;
+let SELECTED = null;   // currently-open cloud entry
+
+// ─── Helpers ───────────────────────────────────────────────────────────
+
+function $(sel) { return document.querySelector(sel); }
+function el(tag, attrs = {}, children = []) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v;
+    else if (k === 'text') e.textContent = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
+  }
+  for (const c of (Array.isArray(children) ? children : [children])) {
+    if (c == null) continue;
+    e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+  }
+  return e;
+}
+function toast(msg, kind = '') {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + kind;
+  setTimeout(() => { t.className = 'toast ' + kind; }, 3500);
+}
+function loadIdentity() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_IDENT) || 'null'); } catch { return null; }
+}
+function saveIdentity(ident) { localStorage.setItem(STORAGE_IDENT, JSON.stringify(ident)); }
+function loadEndpoint() { return localStorage.getItem(STORAGE_ENDPOINT) || 'http://127.0.0.1:7080'; }
+function saveEndpoint(url) { localStorage.setItem(STORAGE_ENDPOINT, url); }
+
+function shortId(id) { return id ? (id.slice(0, 8) + '…' + id.slice(-4)) : ''; }
+
+// random hex (no crypto dep — uses crypto.getRandomValues from web crypto)
+function randomHex(bytes) {
+  const a = new Uint8Array(bytes);
+  crypto.getRandomValues(a);
+  return Array.from(a).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ─── Hatching local identity ───────────────────────────────────────────
+
+function ensureIdentity(handle) {
+  let ident = loadIdentity();
+  if (!ident) {
+    ident = {
+      schema: 'rapp-twin-identity/1.0',
+      handle: handle || '@unhatched',
+      cloud_id: randomHex(16),
+      secret: randomHex(32),
+      hatched_at: new Date().toISOString(),
+      device: navigator.userAgent.slice(0, 80),
+    };
+    saveIdentity(ident);
+  } else if (handle && ident.handle !== handle) {
+    ident.handle = handle;
+    saveIdentity(ident);
+  }
+  return ident;
+}
+
+function renderIdentity() {
+  const ident = loadIdentity();
+  const handle = ident ? ident.handle : '@unhatched';
+  const cid = ident ? ident.cloud_id : '— hatch your twin to mint a cloud_id —';
+  $('#ident-handle').textContent = handle;
+  $('#ident-cloudid').textContent = ident ? `cloud_id: ${cid}` : cid;
+  $('#ident-avatar').textContent = handle.replace('@', '').slice(0, 1).toUpperCase() || '?';
+  $('#ident-input').value = ident ? ident.handle : '';
+  $('#hatch-btn').textContent = ident ? 'Re-hatch' : '🥚 Hatch';
+}
+
+// ─── Bundle assembly from a registry cloud ─────────────────────────────
+
+// Built-in stub agent template. Each swarm in a cloud expands into one
+// stub *_agent.py whose perform() returns its role_framing — enough for
+// a brand-new install to demonstrate the wire contract before the user
+// installs richer behavior. The stubs respect rapp-agent/1.0.
+function stubAgentSource(cloudId, swarm) {
+  const camel = swarm.name.replace(/[^A-Za-z0-9]/g, '');
+  const className = camel + 'Agent';
+  const desc = (swarm.description || '').replace(/"/g, '\\"');
+  const role = (swarm.role_framing || '').replace(/"/g, '\\"');
+  return `from agents.basic_agent import BasicAgent
+
+__manifest__ = {
+    "schema": "rapp-agent/1.0",
+    "name": "@twinstack/${cloudId}-${swarm.name.toLowerCase()}",
+    "tier": "core",
+    "trust": "community",
+    "version": "0.1.0",
+    "tags": ["twin-stack", "hatched-stub"],
+    "example_call": {"args": {}}
+}
+
+
+class ${className}(BasicAgent):
+    def __init__(self):
+        self.name = "${swarm.name}"
+        self.metadata = {
+            "name": self.name,
+            "description": "${desc}",
+            "parameters": {"type": "object", "properties": {}, "required": []}
+        }
+        super().__init__(name=self.name, metadata=self.metadata)
+
+    def perform(self, **kwargs):
+        return (
+            "Stub for ${swarm.name}. Role framing: ${role}. "
+            "Replace with real implementation once your twin learns this domain."
+        )
+`;
+}
+
+function bundleFromCloud(cloud) {
+  const agents = (cloud.swarms || []).map(s => ({
+    filename: `${s.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_agent.py`,
+    name: s.name,
+    description: s.description,
+    source: stubAgentSource(cloud.id, s),
+  }));
+  const ident = loadIdentity() || { handle: '@unhatched' };
+  return {
+    schema: 'rapp-swarm/1.0',
+    name: cloud.title,
+    purpose: cloud.tagline || cloud.for || cloud.title,
+    soul: (cloud.soul_addendum || ''),
+    cloud_id: cloud.id,
+    handle: cloud.owner_handle || ident.handle,
+    created_at: new Date().toISOString(),
+    created_by: ident.handle,
+    twin_stack_meta: {
+      stack: 'The Twin Stack',
+      registry_schema: REGISTRY ? REGISTRY.schema : 'rapp-cloud-registry/1.0',
+      cloud_category: cloud.category,
+      estate: cloud.estate || [],
+    },
+    agents,
+  };
+}
+
+// ─── Registry rendering ────────────────────────────────────────────────
+
+function renderHero() {
+  $('#hero-stack').textContent = `${REGISTRY.stack} · v${REGISTRY.version}`;
+  $('#hero-title').textContent = 'Hatch your digital twin. Local-first. Yours forever.';
+  $('#hero-desc').textContent = REGISTRY.description;
+
+  const layers = $('#layers');
+  layers.innerHTML = '';
+  for (const [tag, desc] of Object.entries(REGISTRY.collaboration_layers || {})) {
+    layers.appendChild(el('div', { class: 'layer' }, [
+      el('div', { class: 'tag', text: tag }),
+      el('div', { class: 'desc', text: desc }),
+    ]));
+  }
+  $('#tether-blurb').textContent = REGISTRY.tether_estate || '';
+}
+
+function cloudCard(cloud, isSpecific) {
+  return el('div', {
+    class: 'cloud',
+    onclick: () => openModal(cloud),
+  }, [
+    el('div', { class: 'head' }, [
+      el('div', { class: 'icon', text: cloud.icon || '🤖' }),
+      el('div', {}, [
+        el('div', { class: 'name', text: cloud.title }),
+        cloud.owner_handle ? el('div', { class: 'handle', text: cloud.owner_handle }) : null,
+      ]),
+    ]),
+    el('div', { class: 'tagline', text: cloud.tagline || '' }),
+    el('div', { class: 'for', text: cloud.for || '' }),
+    el('div', { class: 'meta' }, [
+      el('span', { class: 'pill', text: `${(cloud.swarms || []).length} swarms` }),
+      cloud.category ? el('span', { class: 'pill', text: cloud.category }) : null,
+      isSpecific ? el('span', { class: 'pill specific', text: 'specific human' }) : null,
+    ]),
+  ]);
+}
+
+function renderClouds() {
+  const heroGrid = $('#hero-grid');
+  heroGrid.innerHTML = '';
+  for (const c of (REGISTRY.hero_humans || [])) heroGrid.appendChild(cloudCard(c, true));
+  if (!heroGrid.children.length) heroGrid.innerHTML = '<div class="empty">No specific-human clouds in registry.</div>';
+
+  const roleGrid = $('#role-grid');
+  roleGrid.innerHTML = '';
+  for (const c of (REGISTRY.hero_role_twins || [])) roleGrid.appendChild(cloudCard(c, false));
+  if (!roleGrid.children.length) roleGrid.innerHTML = '<div class="empty">No role twins in registry.</div>';
+}
+
+function renderPrompts() {
+  const wrap = $('#prompts');
+  wrap.innerHTML = '';
+  const list = (REGISTRY.demo_prompts && REGISTRY.demo_prompts.mind_blowing_10) || [];
+  list.forEach((p, i) => {
+    const pmt = el('div', { class: 'pmt', text: p.prompt, title: 'Click to expand / copy' });
+    pmt.addEventListener('click', () => {
+      pmt.classList.toggle('expanded');
+      navigator.clipboard.writeText(p.prompt).then(
+        () => toast('Prompt copied to clipboard', 'ok'),
+        () => {}
+      );
+    });
+    wrap.appendChild(el('div', { class: 'prompt' }, [
+      el('div', { class: 'num', text: String(i + 1).padStart(2, '0') }),
+      el('div', { class: 'ttl', text: p.title }),
+      el('div', { class: 'scn', text: p.scenario || '' }),
+      pmt,
+    ]));
+  });
+  if (!list.length) wrap.innerHTML = '<div class="empty">No demo prompts in registry.</div>';
+}
+
+// ─── Modal ─────────────────────────────────────────────────────────────
+
+function openModal(cloud) {
+  SELECTED = cloud;
+  $('#m-title').innerHTML = `${cloud.icon || '🤖'} ${cloud.title}` +
+    (cloud.owner_handle ? ` <small>${cloud.owner_handle}</small>` : '');
+  const body = $('#m-body');
+  body.innerHTML = '';
+
+  body.appendChild(el('h4', { text: 'For' }));
+  body.appendChild(el('p', { text: cloud.for || cloud.tagline || '' }));
+
+  if (cloud.tagline && cloud.for !== cloud.tagline) {
+    body.appendChild(el('h4', { text: 'Tagline' }));
+    body.appendChild(el('p', { text: cloud.tagline, style: 'font-style: italic; color: #c9d1d9;' }));
+  }
+
+  body.appendChild(el('h4', { text: 'Soul addendum' }));
+  body.appendChild(el('pre', { class: 'soul-block', text: cloud.soul_addendum || '(none)' }));
+
+  body.appendChild(el('h4', { text: `Swarms (${(cloud.swarms || []).length})` }));
+  const sl = el('div', { class: 'swarm-list' });
+  for (const s of (cloud.swarms || [])) {
+    sl.appendChild(el('div', { class: 'swarm-item' }, [
+      el('div', { class: 'nm', text: s.name }),
+      el('div', { class: 'ds', text: s.description || s.role_framing || '' }),
+    ]));
+  }
+  body.appendChild(sl);
+
+  if (cloud.estate && cloud.estate.length) {
+    body.appendChild(el('h4', { text: `Tether estate (${cloud.estate.length})` }));
+    const est = el('div', { class: 'estate-list' });
+    for (const e of cloud.estate) {
+      est.appendChild(el('div', { class: 'row' }, [
+        el('div', { class: 'dev', text: e.device || '' }),
+        el('div', { class: 'te', text: e.tether || '' }),
+        el('div', { class: 'pp', text: e.purpose || '' }),
+      ]));
+    }
+    body.appendChild(est);
+  }
+
+  if (cloud.demo_prompt) {
+    body.appendChild(el('h4', { text: 'Demo prompt (try this after hatching)' }));
+    body.appendChild(el('div', { class: 'demo', text: cloud.demo_prompt }));
+  }
+
+  $('#modal-bg').classList.add('open');
+}
+function closeModal() {
+  $('#modal-bg').classList.remove('open');
+  SELECTED = null;
+}
+$('#m-close').addEventListener('click', closeModal);
+$('#modal-bg').addEventListener('click', (e) => { if (e.target.id === 'modal-bg') closeModal(); });
+
+// ─── Bundle actions ────────────────────────────────────────────────────
+
+function downloadBundle() {
+  if (!SELECTED) return;
+  const bundle = bundleFromCloud(SELECTED);
+  const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${SELECTED.id}.swarm.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Bundle downloaded', 'ok');
+}
+
+function copyBundle() {
+  if (!SELECTED) return;
+  const bundle = bundleFromCloud(SELECTED);
+  const json = JSON.stringify(bundle, null, 2);
+  navigator.clipboard.writeText(json).then(
+    () => toast(`Bundle JSON copied (${json.length} bytes)`, 'ok'),
+    () => toast('Clipboard write failed', 'bad')
+  );
+}
+
+async function pushBundle() {
+  if (!SELECTED) return;
+  const endpoint = $('#endpoint').value.trim().replace(/\/+$/, '');
+  if (!endpoint) { toast('Set a swarm endpoint first', 'bad'); return; }
+  const bundle = bundleFromCloud(SELECTED);
+  const btn = $('#m-push');
+  btn.disabled = true; btn.textContent = '… pushing';
+  try {
+    const r = await fetch(endpoint + '/api/swarm/deploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bundle),
+    });
+    const j = await r.json();
+    if (r.ok && j.swarm_guid) {
+      toast(`✓ Hatched ${SELECTED.title} → ${shortId(j.swarm_guid)}`, 'ok');
+      saveEndpoint(endpoint);
+    } else {
+      toast(`Push failed: ${j.message || r.status}`, 'bad');
+    }
+  } catch (e) {
+    toast(`Network error: ${e.message}`, 'bad');
+  } finally {
+    btn.disabled = false; btn.textContent = '🚀 Push to endpoint';
+  }
+}
+
+$('#m-download').addEventListener('click', downloadBundle);
+$('#m-copy').addEventListener('click', copyBundle);
+$('#m-push').addEventListener('click', async () => {
+  await pushBundle();
+  await refreshHatched();
+});
+
+// ─── Hatched-swarms list ───────────────────────────────────────────────
+
+async function refreshHatched() {
+  const endpoint = $('#endpoint').value.trim().replace(/\/+$/, '');
+  const grid = $('#hatched-grid');
+  if (!endpoint) { grid.innerHTML = '<div class="empty">No endpoint set.</div>'; return; }
+  try {
+    const r = await fetch(endpoint + '/api/swarm/healthz');
+    const j = await r.json();
+    grid.innerHTML = '';
+    if (!j.swarms || !j.swarms.length) {
+      grid.innerHTML = '<div class="empty">No swarms hatched on this endpoint yet.</div>';
+      return;
+    }
+    for (const s of j.swarms) {
+      const card = el('div', { class: 'hatched-card' }, [
+        el('div', { style: 'flex:1' }, [
+          el('div', { class: 'nm', text: s.name }),
+          el('div', { class: 'gd', text: s.swarm_guid }),
+          el('div', { class: 'ag', text: `${s.agent_count} agents` }),
+        ]),
+        el('button', { class: 'primary', onclick: () => openChat(s, endpoint) }, '💬 Chat'),
+        el('button', { class: 'danger', onclick: () => tearDown(s, endpoint) }, '✕'),
+      ]);
+      grid.appendChild(card);
+    }
+  } catch (e) {
+    grid.innerHTML = `<div class="empty">Endpoint unreachable: ${e.message}</div>`;
+  }
+}
+
+async function tearDown(s, endpoint) {
+  if (!confirm(`Tear down "${s.name}" on ${endpoint}?\n\nguid: ${s.swarm_guid}\nThis deletes its agents and memory locally.`)) return;
+  try {
+    const r = await fetch(endpoint + '/api/swarm/' + s.swarm_guid, { method: 'DELETE' });
+    if (r.ok) { toast('Swarm torn down', 'ok'); await refreshHatched(); }
+    else { const j = await r.json().catch(() => ({})); toast(`Tear-down failed: ${j.message || r.status}`, 'bad'); }
+  } catch (e) { toast(`Network error: ${e.message}`, 'bad'); }
+}
+
+// ─── Chat drawer ───────────────────────────────────────────────────────
+
+const CHAT_STATE = { swarm: null, endpoint: null, history: [] };
+
+async function openChat(swarm, endpoint) {
+  CHAT_STATE.swarm = swarm;
+  CHAT_STATE.endpoint = endpoint;
+  CHAT_STATE.history = [];
+  $('#chat-name').textContent = swarm.name;
+  $('#chat-guid').textContent = swarm.swarm_guid;
+  $('#chat-log').innerHTML = '';
+  $('#chat-status').textContent = 'Probing LLM provider…';
+  $('#chat-bg').classList.add('open');
+
+  // Probe provider
+  try {
+    const r = await fetch(endpoint + '/api/llm/status');
+    const j = await r.json();
+    $('#chat-provider').textContent = j.provider + (j.azure_deployment ? ` · ${j.azure_deployment}` : '');
+    $('#chat-status').textContent = `Ready · ${j.provider}${j.fake_mode ? ' (fake mode)' : ''}`;
+  } catch {
+    $('#chat-provider').textContent = '?';
+    $('#chat-status').textContent = 'Provider probe failed.';
+  }
+  setTimeout(() => $('#chat-input').focus(), 50);
+}
+
+function closeChat() { $('#chat-bg').classList.remove('open'); }
+
+function appendChatMsg(role, content, voice) {
+  const log = $('#chat-log');
+  const msg = el('div', { class: 'chat-msg ' + role });
+  msg.appendChild(document.createTextNode(content || ''));
+  if (voice && role === 'assistant') {
+    msg.appendChild(el('div', { class: 'voice', text: '🔊 ' + voice }));
+  }
+  log.appendChild(msg);
+  log.scrollTop = log.scrollHeight;
+}
+
+async function sendChat() {
+  const input = $('#chat-input');
+  const text = input.value.trim();
+  if (!text || !CHAT_STATE.swarm) return;
+  input.value = '';
+  appendChatMsg('user', text);
+  CHAT_STATE.history.push({ role: 'user', content: text });
+
+  const sendBtn = $('#chat-send');
+  sendBtn.disabled = true;
+  $('#chat-status').textContent = '… thinking';
+
+  try {
+    const url = `${CHAT_STATE.endpoint}/api/swarm/${CHAT_STATE.swarm.swarm_guid}/chat`;
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_input: text,
+        conversation_history: CHAT_STATE.history.slice(0, -1),
+      }),
+    });
+    const j = await r.json();
+    if (j.error) {
+      appendChatMsg('assistant', `❌ ${j.error}`);
+      $('#chat-status').textContent = 'Error.';
+    } else {
+      // Show tool-call logs (compact)
+      for (const log of (j.agent_logs || [])) {
+        appendChatMsg('tool', `→ ${log.name}(${JSON.stringify(log.args)})  [${log.ms}ms]`);
+      }
+      const resp = j.response || j.assistant_response || '';
+      const voice = j.voice_response || '';
+      appendChatMsg('assistant', resp, voice);
+      CHAT_STATE.history.push({ role: 'assistant', content: resp });
+      $('#chat-status').textContent =
+        `${j.provider || ''} · rounds=${j.rounds || 0} · ${(j.agent_logs || []).length} tool call(s)`;
+    }
+  } catch (e) {
+    appendChatMsg('assistant', `❌ network: ${e.message}`);
+    $('#chat-status').textContent = 'Network error.';
+  } finally {
+    sendBtn.disabled = false;
+  }
+}
+
+$('#chat-close').addEventListener('click', closeChat);
+$('#chat-bg').addEventListener('click', (e) => { if (e.target.id === 'chat-bg') closeChat(); });
+$('#chat-send').addEventListener('click', sendChat);
+$('#chat-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+});
+
+// ─── Hatch / probe ─────────────────────────────────────────────────────
+
+$('#hatch-btn').addEventListener('click', () => {
+  const handle = ($('#ident-input').value || '').trim() || '@unhatched';
+  ensureIdentity(handle);
+  renderIdentity();
+  toast(`Hatched as ${handle}`, 'ok');
+});
+
+async function probe() {
+  const endpoint = $('#endpoint').value.trim().replace(/\/+$/, '');
+  const status = $('#endpoint-status');
+  status.className = 'endpoint-status';
+  status.textContent = 'probing…';
+  try {
+    const r = await fetch(endpoint + '/api/swarm/healthz');
+    const j = await r.json();
+    if (j.status === 'ok') {
+      status.classList.add('ok');
+      status.textContent = `ok · ${j.swarm_count} swarms hosted`;
+      saveEndpoint(endpoint);
+    } else {
+      status.classList.add('bad');
+      status.textContent = 'unexpected response';
+    }
+  } catch (e) {
+    status.classList.add('bad');
+    status.textContent = `unreachable (${e.message})`;
+  }
+}
+$('#probe-btn').addEventListener('click', probe);
+
+// ─── Boot ──────────────────────────────────────────────────────────────
+
+async function boot() {
+  $('#endpoint').value = loadEndpoint();
+  renderIdentity();
+  try {
+    const r = await fetch(REGISTRY_URL, { cache: 'no-cache' });
+    REGISTRY = await r.json();
+    if (!REGISTRY || REGISTRY.schema !== 'rapp-cloud-registry/1.0') {
+      throw new Error(`unexpected registry schema: ${REGISTRY && REGISTRY.schema}`);
+    }
+  } catch (e) {
+    $('#hero-desc').textContent = `Failed to load registry: ${e.message}`;
+    toast('Registry load failed', 'bad');
+    return;
+  }
+  renderHero();
+  renderClouds();
+  renderPrompts();
+}
+boot();
+</script>
+
+</body>
+</html>

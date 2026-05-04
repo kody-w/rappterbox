@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Brainstem Neighborhood</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: #161b22;
+    --panel-hover: #1c232c;
+    --border: #2a3140;
+    --text: #e6edf3;
+    --muted: #8d96a0;
+    --green: #3fb950;
+    --gray: #5a6470;
+    --blue: #58a6ff;
+    --gold: #d29922;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    padding: 24px 32px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 600;
+  }
+  header h1 .sub {
+    display: block;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .controls {
+    margin-top: 16px;
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .controls a {
+    color: var(--blue);
+    text-decoration: none;
+  }
+  .controls a:hover { text-decoration: underline; }
+  .legend {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+  }
+  .dot.online  { background: var(--green); box-shadow: 0 0 6px rgba(63, 185, 80, 0.6); }
+  .dot.offline { background: var(--gray); }
+  main {
+    padding: 24px 32px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    transition: background 0.15s;
+  }
+  .card:hover { background: var(--panel-hover); }
+  .card.self { border-color: var(--blue); }
+  .card.global { border-left: 3px solid var(--gold); }
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 8px;
+  }
+  .card-title {
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    background: var(--blue);
+    color: var(--bg);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .badge.global { background: var(--gold); color: var(--bg); }
+  .card-meta {
+    color: var(--muted);
+    font-size: 12px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    word-break: break-all;
+    margin-bottom: 12px;
+  }
+  .card-status {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .card-status .state {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+  }
+  .card-actions a {
+    color: var(--blue);
+    text-decoration: none;
+    font-size: 12px;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-left: 4px;
+  }
+  .card-actions a:hover { background: var(--panel-hover); }
+  .start-hint {
+    margin-top: 8px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px;
+    color: var(--muted);
+    background: rgba(0,0,0,0.3);
+    padding: 6px 8px;
+    border-radius: 4px;
+    word-break: break-all;
+  }
+  .empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 64px 32px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .empty code {
+    background: var(--panel);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+  .meta-row {
+    color: var(--muted);
+    font-size: 11px;
+    display: flex;
+    gap: 12px;
+    margin-top: 4px;
+  }
+  .refresh {
+    color: var(--muted);
+    font-size: 11px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>
+    Brainstem Neighborhood
+    <span class="sub">every RAPP brainstem this machine knows about — online and off</span>
+  </h1>
+  <div class="controls">
+    <span class="legend"><span class="dot online"></span> online</span>
+    <span class="legend"><span class="dot offline"></span> offline</span>
+    <span class="refresh" id="refresh">Refreshing every 5s · last update: never</span>
+    <a href="/">← chat</a>
+  </div>
+</header>
+
+<main id="grid">
+  <div class="empty">Loading neighborhood…</div>
+</main>
+
+<script>
+const grid = document.getElementById('grid');
+const refresh = document.getElementById('refresh');
+
+function timeAgo(iso) {
+  if (!iso) return '';
+  const t = Date.parse(iso);
+  if (!t) return '';
+  const s = Math.floor((Date.now() - t) / 1000);
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s/60)}m ago`;
+  if (s < 86400) return `${Math.floor(s/3600)}h ago`;
+  return `${Math.floor(s/86400)}d ago`;
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+function startCommand(p) {
+  // brainstem_dir is .../something/.brainstem/src/rapp_brainstem
+  // start.sh lives at .../something/.brainstem/start.sh
+  const dir = p.brainstem_dir || '';
+  const m = dir.match(/^(.*\/\.brainstem)\/src\/rapp_brainstem$/);
+  if (m) return `${m[1]}/start.sh`;
+  if (p.is_global) return `brainstem start`;
+  return dir;
+}
+
+function render(payload) {
+  const peers = payload.peers || [];
+  if (!peers.length) {
+    grid.innerHTML = `
+      <div class="empty">
+        No brainstems registered yet.<br>
+        Run <code>curl -fsSL https://kody-w.github.io/RAPP/installer/install.sh | bash</code>
+        to install one — or <code>... | bash -s -- --here</code> for a project-local one.
+      </div>`;
+    return;
+  }
+
+  grid.innerHTML = peers.map(p => {
+    const cls = ['card'];
+    if (p.is_self)   cls.push('self');
+    if (p.is_global) cls.push('global');
+    const dotCls = p.live ? 'online' : 'offline';
+    const stateLabel = p.live ? 'online' : 'offline';
+    const versionStr = p.version ? `v${escapeHtml(p.version)}` : '';
+    const uiUrl = p.live ? `http://127.0.0.1:${p.port}/` : null;
+    const installedRel = p.installed_at ? `installed ${escapeHtml(timeAgo(p.installed_at))}` : '';
+
+    const title = p.is_global ? 'Global' : escapeHtml(p.project_name || `peer-${p.id}`);
+    const badge = p.is_self
+      ? `<span class="badge">this brainstem</span>`
+      : (p.is_global ? `<span class="badge global">global</span>` : '');
+
+    return `
+      <div class="${cls.join(' ')}">
+        <div class="card-header">
+          <span class="card-title">${title}</span>
+          ${badge}
+        </div>
+        <div class="card-meta">${escapeHtml(p.brainstem_dir)}</div>
+        <div class="meta-row">
+          <span>port ${p.port}</span>
+          ${versionStr ? `<span>${versionStr}</span>` : ''}
+          ${installedRel ? `<span>${installedRel}</span>` : ''}
+        </div>
+        <div class="card-status">
+          <span class="state">
+            <span class="dot ${dotCls}"></span>${stateLabel}
+          </span>
+          <span class="card-actions">
+            ${uiUrl ? `<a href="${uiUrl}" target="_blank">open ↗</a>` : ''}
+          </span>
+        </div>
+        ${!p.live && !p.is_self ? `<div class="start-hint">${escapeHtml(startCommand(p))}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+async function poll() {
+  try {
+    const r = await fetch('/api/neighborhood/peers', { cache: 'no-store' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    render(data);
+    refresh.textContent = `Refreshing every 5s · last update: ${new Date().toLocaleTimeString()}`;
+  } catch (e) {
+    refresh.textContent = `Refresh failed: ${e.message} (retrying)`;
+  }
+}
+
+poll();
+setInterval(poll, 5000);
+</script>
+
+</body>
+</html>

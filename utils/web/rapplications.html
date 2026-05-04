@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAPP — Rapplication Tester</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; padding: 20px; }
+  h1 { font-size: 18px; color: #58a6ff; margin-bottom: 4px; }
+  h2 { font-size: 14px; color: #8b949e; margin-bottom: 16px; font-weight: normal; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 16px; margin-bottom: 20px; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; }
+  .card h3 { font-size: 14px; color: #58a6ff; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .card h3 .badge { font-size: 10px; background: #1f6feb33; color: #58a6ff; padding: 2px 6px; border-radius: 4px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .actions button { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+  .actions button:hover { background: #30363d; }
+  .actions button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  .actions button.primary:hover { background: #388bfd; }
+  .actions button.danger { color: #f85149; border-color: #f8514933; }
+  .output { background: #0d1117; border: 1px solid #21262d; border-radius: 4px; padding: 8px; font-family: 'Cascadia Code', monospace; font-size: 11px; max-height: 200px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; min-height: 40px; }
+  .output.success { border-color: #238636; }
+  .output.error { border-color: #f85149; }
+  .input-row { display: flex; gap: 6px; margin-bottom: 8px; }
+  .input-row input { flex: 1; background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; padding: 5px 8px; border-radius: 4px; font-size: 11px; }
+  .chat-section { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; margin-bottom: 20px; }
+  .chat-section h3 { font-size: 14px; color: #f0883e; margin-bottom: 8px; }
+  .chat-input { display: flex; gap: 8px; margin-bottom: 10px; }
+  .chat-input input { flex: 1; background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; padding: 8px 12px; border-radius: 6px; font-size: 13px; }
+  .chat-input button { background: #1f6feb; border: none; color: #fff; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .chat-output { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .chat-output .pane { background: #0d1117; border: 1px solid #21262d; border-radius: 4px; padding: 10px; min-height: 80px; }
+  .chat-output .pane h4 { font-size: 11px; color: #8b949e; margin-bottom: 6px; text-transform: uppercase; }
+  .chat-output .pane pre { font-size: 11px; white-space: pre-wrap; word-break: break-all; }
+  .status-bar { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; font-size: 12px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .status-dot.up { background: #238636; }
+  .status-dot.down { background: #f85149; }
+  .twin-pane { border-color: #8957e5 !important; }
+  .twin-pane h4 { color: #8957e5 !important; }
+  .loading { color: #8b949e; font-style: italic; }
+</style>
+</head>
+<body>
+
+<h1>Rapplication Tester</h1>
+<h2>Test agents (via /chat) and services (via /api/*) side by side</h2>
+
+<div class="status-bar">
+  <span>Brainstem: <span class="status-dot" id="dot-bs"></span> <span id="status-bs">checking...</span></span>
+  <span>Twin: <span id="twin-status">?</span></span>
+  <span>Agents: <span id="agent-count">?</span></span>
+  <span>Services: <span id="service-count">?</span></span>
+</div>
+
+<!-- Chat (agent-first test) -->
+<div class="chat-section">
+  <h3>Chat (Agent-First)</h3>
+  <div class="chat-input">
+    <input id="chat-input" placeholder="e.g. Build me a habit tracker, or: Save a bookmark for github.com" onkeydown="if(event.key==='Enter')sendChat()">
+    <button onclick="sendChat()">Send</button>
+  </div>
+  <div class="chat-output">
+    <div class="pane"><h4>Response</h4><pre id="chat-response" class="loading">waiting...</pre></div>
+    <div class="pane twin-pane"><h4>Twin</h4><pre id="chat-twin" class="loading">waiting...</pre></div>
+    <div class="pane"><h4>Agent Logs</h4><pre id="chat-logs" class="loading">waiting...</pre></div>
+    <div class="pane"><h4>Raw JSON</h4><pre id="chat-raw" class="loading">waiting...</pre></div>
+  </div>
+</div>
+
+<!-- Service endpoint testers -->
+<div class="grid">
+
+  <!-- Kanban -->
+  <div class="card">
+    <h3>Kanban <span class="badge">workspace</span></h3>
+    <div class="input-row">
+      <input id="kanban-title" placeholder="Task title">
+      <input id="kanban-col" placeholder="Column (backlog)" value="backlog" style="width:100px;flex:none">
+    </div>
+    <div class="actions">
+      <button class="primary" onclick="kanbanCreate()">Create Task</button>
+      <button onclick="svcGet('kanban')">List All</button>
+      <button class="danger" onclick="kanbanDelete()">Delete Last</button>
+    </div>
+    <div class="output" id="out-kanban">click a button to test</div>
+  </div>
+
+  <!-- Webhook -->
+  <div class="card">
+    <h3>Webhook <span class="badge">integration</span></h3>
+    <div class="input-row">
+      <input id="webhook-source" placeholder="Source (github)" value="github">
+      <input id="webhook-event" placeholder="Event type" value="push">
+    </div>
+    <div class="actions">
+      <button class="primary" onclick="webhookIngest()">Send Event</button>
+      <button onclick="svcGet('webhook','events')">List Events</button>
+    </div>
+    <div class="output" id="out-webhook">click a button to test</div>
+  </div>
+
+  <!-- Dashboard -->
+  <div class="card">
+    <h3>Dashboard <span class="badge">analytics</span></h3>
+    <div class="input-row">
+      <input id="dash-metric" placeholder="Metric name" value="api_latency">
+      <input id="dash-value" placeholder="Value" value="230" style="width:80px;flex:none">
+      <input id="dash-unit" placeholder="Unit" value="ms" style="width:60px;flex:none">
+    </div>
+    <div class="actions">
+      <button class="primary" onclick="dashLog()">Log Metric</button>
+      <button onclick="svcGet('dashboard')">List All</button>
+    </div>
+    <div class="output" id="out-dashboard">click a button to test</div>
+  </div>
+
+  <!-- Swarms -->
+  <div class="card">
+    <h3>Swarms <span class="badge">platform</span></h3>
+    <div class="input-row">
+      <input id="swarm-name" placeholder="Swarm name" value="test-swarm">
+    </div>
+    <div class="actions">
+      <button class="primary" onclick="swarmCreate()">Create Swarm</button>
+      <button onclick="svcGet('swarms')">List All</button>
+      <button class="danger" onclick="swarmDelete()">Delete</button>
+    </div>
+    <div class="output" id="out-swarms">click a button to test</div>
+  </div>
+
+  <!-- Binder -->
+  <div class="card">
+    <h3>Binder <span class="badge">platform</span></h3>
+    <div class="actions">
+      <button onclick="svcGet('binder')">Installed</button>
+      <button onclick="svcGet('binder','catalog')">Catalog</button>
+    </div>
+    <div class="output" id="out-binder">click a button to test</div>
+  </div>
+
+  <!-- Twin -->
+  <div class="card">
+    <h3>Twin <span class="badge">core</span></h3>
+    <div class="actions">
+      <button onclick="twinGet()">Status</button>
+      <button class="primary" onclick="twinToggle()">Toggle</button>
+    </div>
+    <div class="output" id="out-twin">click a button to test</div>
+  </div>
+
+</div>
+
+<script>
+const API = window.location.origin;
+
+// ── Status ──
+async function checkStatus() {
+  try {
+    const r = await fetch(API + '/health');
+    const d = await r.json();
+    document.getElementById('dot-bs').className = 'status-dot up';
+    document.getElementById('status-bs').textContent = d.version || 'up';
+    document.getElementById('twin-status').textContent = d.twin_mode ? 'on' : 'off';
+    document.getElementById('agent-count').textContent = (d.agents || []).length;
+    // Count services
+    let svcCount = 0;
+    for (const name of ['swarms', 'binder', 'kanban', 'webhook', 'dashboard']) {
+      try { const sr = await fetch(API + '/api/' + name); if (sr.ok) svcCount++; } catch {}
+    }
+    document.getElementById('service-count').textContent = svcCount;
+  } catch {
+    document.getElementById('dot-bs').className = 'status-dot down';
+    document.getElementById('status-bs').textContent = 'offline';
+  }
+}
+checkStatus();
+
+// ── Chat ──
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  document.getElementById('chat-response').textContent = 'thinking...';
+  document.getElementById('chat-response').className = 'loading';
+  document.getElementById('chat-twin').textContent = '...';
+  document.getElementById('chat-logs').textContent = '...';
+  document.getElementById('chat-raw').textContent = '...';
+  try {
+    const r = await fetch(API + '/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_input: msg, conversation_history: [] })
+    });
+    const d = await r.json();
+    document.getElementById('chat-response').textContent = d.response || d.error || '(empty)';
+    document.getElementById('chat-response').className = '';
+    document.getElementById('chat-twin').textContent = d.twin_response || '(no twin)';
+    document.getElementById('chat-logs').textContent = d.agent_logs || '(none)';
+    document.getElementById('chat-raw').textContent = JSON.stringify(d, null, 2).slice(0, 2000);
+    checkStatus();
+  } catch (e) {
+    document.getElementById('chat-response').textContent = 'Error: ' + e.message;
+    document.getElementById('chat-response').className = '';
+  }
+}
+
+// ── Service helpers ──
+function out(svc, text, ok) {
+  const el = document.getElementById('out-' + svc);
+  el.textContent = typeof text === 'object' ? JSON.stringify(text, null, 2) : text;
+  el.className = 'output ' + (ok ? 'success' : 'error');
+}
+
+async function svcGet(svc, path) {
+  try {
+    const url = API + '/api/' + svc + (path ? '/' + path : '');
+    const r = await fetch(url);
+    const d = await r.json();
+    out(svc, d, r.ok);
+  } catch (e) { out(svc, 'Error: ' + e.message, false); }
+}
+
+async function svcPost(svc, path, body) {
+  try {
+    const r = await fetch(API + '/api/' + svc + '/' + path, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    out(svc, d, r.ok);
+    return d;
+  } catch (e) { out(svc, 'Error: ' + e.message, false); }
+}
+
+async function svcPut(svc, path, body) {
+  try {
+    const r = await fetch(API + '/api/' + svc + '/' + path, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    out(svc, d, r.ok);
+  } catch (e) { out(svc, 'Error: ' + e.message, false); }
+}
+
+async function svcDelete(svc, path) {
+  try {
+    const r = await fetch(API + '/api/' + svc + '/' + path, { method: 'DELETE' });
+    const d = await r.json();
+    out(svc, d, r.ok);
+  } catch (e) { out(svc, 'Error: ' + e.message, false); }
+}
+
+// ── Kanban ──
+let lastKanbanId = null;
+async function kanbanCreate() {
+  const title = document.getElementById('kanban-title').value || 'Test task';
+  const col = document.getElementById('kanban-col').value || 'backlog';
+  const d = await svcPost('kanban', 'tasks', { title, column: col });
+  if (d && d.task_id) lastKanbanId = d.task_id;
+}
+async function kanbanDelete() {
+  if (!lastKanbanId) { out('kanban', 'No task to delete — create one first', false); return; }
+  await svcDelete('kanban', 'tasks/' + lastKanbanId);
+  lastKanbanId = null;
+}
+
+// ── Webhook ──
+async function webhookIngest() {
+  const source = document.getElementById('webhook-source').value || 'test';
+  const event_type = document.getElementById('webhook-event').value || 'ping';
+  await svcPost('webhook', 'ingest', { source, event_type, summary: 'Test event from rapplication tester' });
+}
+
+// ── Dashboard ──
+async function dashLog() {
+  const metric = document.getElementById('dash-metric').value || 'test_metric';
+  const value = parseFloat(document.getElementById('dash-value').value) || 0;
+  const unit = document.getElementById('dash-unit').value || '';
+  await svcPost('dashboard', metric, { value, unit });
+}
+
+// ── Swarms ──
+async function swarmCreate() {
+  const name = document.getElementById('swarm-name').value || 'test';
+  await svcPut('swarms', name, { agents: [], mode: 'stack' });
+}
+async function swarmDelete() {
+  const name = document.getElementById('swarm-name').value || 'test';
+  await svcDelete('swarms', name);
+}
+
+// ── Twin ──
+async function twinGet() {
+  try {
+    const r = await fetch(API + '/twin');
+    const d = await r.json();
+    out('twin', d, true);
+  } catch (e) { out('twin', 'Error: ' + e.message, false); }
+}
+async function twinToggle() {
+  try {
+    const r = await fetch(API + '/twin/toggle', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+    const d = await r.json();
+    out('twin', d, true);
+    document.getElementById('twin-status').textContent = d.twin_mode ? 'on' : 'off';
+  } catch (e) { out('twin', 'Error: ' + e.message, false); }
+}
+</script>
+</body>
+</html>
