@@ -108,6 +108,66 @@ for f in "$RAPPTERBOX_DIR/agents/"*_agent.py; do
 done
 echo "[rappterbox] cartridges: $new_count new, $skipped_count already-present"
 
+# Layer 1b: body_functions / services — HTTP route handlers under
+# /api/<name>/... The brainstem looks for "*_service.py" (older
+# canonical convention) under utils/services/. We install rappterbox's
+# body_functions there with the renamed suffix so they work on every
+# brainstem flavor.
+mkdir -p "$BRAINSTEM_SRC/utils/services"
+svc_new=0; svc_skipped=0
+for f in "$RAPPTERBOX_DIR/utils/body_functions/"*_body_function.py; do
+    [ -f "$f" ] || continue
+    base="$(basename "$f" _body_function.py)"
+    target="$BRAINSTEM_SRC/utils/services/${base}_service.py"
+    if [ -f "$target" ]; then
+        if cmp -s "$f" "$target"; then
+            svc_skipped=$((svc_skipped + 1))
+        else
+            echo "[rappterbox]   ⚠ ${base}_service.py exists with different content — skipping"
+            svc_skipped=$((svc_skipped + 1))
+        fi
+    else
+        cp "$f" "$target"
+        svc_new=$((svc_new + 1))
+    fi
+done
+echo "[rappterbox] body_functions: $svc_new new, $svc_skipped already-present"
+
+# Layer 1c: utility modules under utils/ — peer_registry, lineage_check,
+# egg, etc. Install missing modules; for present-but-older modules,
+# upgrade only if schema is additive (rule: never overwrite local data
+# means LOCAL MUTATIONS — schema upgrades to shared modules are fine
+# and required for new endpoints to work). We use cmp-check: skip if
+# identical, install if missing, refuse if differing.
+util_new=0; util_skipped=0; util_upgraded=0
+for f in "$RAPPTERBOX_DIR/utils/"*.py; do
+    [ -f "$f" ] || continue
+    base="$(basename "$f")"
+    target="$BRAINSTEM_SRC/utils/$base"
+    if [ ! -f "$target" ]; then
+        cp "$f" "$target"
+        util_new=$((util_new + 1))
+    elif cmp -s "$f" "$target"; then
+        util_skipped=$((util_skipped + 1))
+    else
+        # Differing — auto-upgrade for known-additive shared modules
+        # (peer_registry, lineage_check, egg). For everything else,
+        # respect local mutations and skip with a warning.
+        case "$base" in
+            peer_registry.py|lineage_check.py|egg.py)
+                cp "$f" "$target"
+                util_upgraded=$((util_upgraded + 1))
+                echo "[rappterbox]   ↑ upgraded $base (additive schema bump)"
+                ;;
+            *)
+                echo "[rappterbox]   ⚠ $base differs — skipping (local mutation preserved)"
+                util_skipped=$((util_skipped + 1))
+                ;;
+        esac
+    fi
+done
+echo "[rappterbox] utils: $util_new new, $util_upgraded upgraded, $util_skipped already-present"
+
 # Layer 2: expansion packs live at the install root (NOT under src/) — they're
 # not auto-loaded by the brainstem, just held until the user installs one.
 mkdir -p "$BRAINSTEM_HOME/expansion_packs"
