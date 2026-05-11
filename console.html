@@ -961,17 +961,18 @@ window.addEventListener("message", async (ev) => {
       const r = await fetch(`${BRAINSTEM_BASE}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_input: m.text, conversation_history: [] }),
+        body: JSON.stringify({ user_input: m.text, conversation_history: m.conversation_history || [] }),
       });
       if (!r.ok) throw new Error("brainstem returned " + r.status);
       const data = await r.json();
       const reply = data.response || data.message || JSON.stringify(data);
       activeCart.__iframe.contentWindow.postMessage({
-        kind: "chat_response", text: reply, twin_rappid: m.twin_rappid || "twin",
+        kind: "chat_response", corr: m.corr, text: reply, twin_rappid: m.twin_rappid || "twin",
       }, "*");
     } catch (e) {
       activeCart.__iframe.contentWindow.postMessage({
         kind: "chat_response",
+        corr: m.corr,
         text: "(brainstem unreachable — " + e.message + ")",
         twin_rappid: "error",
       }, "*");
