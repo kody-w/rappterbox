@@ -1,44 +1,80 @@
-# `.cart.json` — rappterbox cartridge format v0.1
+# `.egg` cartridge — `brainstem-egg/2.3-session` (formerly `rappterbox-cart/0.1`)
 
-Schema id: `rappterbox-cart/0.1`
+A **session cartridge** is one variant of the unified **`.egg` cartridge** family. The egg cartridge is the universal sneakernet primitive across the RAPP ecosystem — anything portable between brainstems is an egg cartridge, identified by its schema kind. Same `.egg` extension, same rappzoo Pokédex shelf, same drag-drop UX. The kernel's `egg_hatcher_agent.py` introspects the cartridge and routes to the right destination based on what's inside.
 
-A cartridge is a single JSON file that fully describes one workflow session: the participants, the runtime that renders the session, and the transcript of everything that happened inside it. Drop one onto the rappterbox console and the session reanimates.
+## The egg-cartridge family
 
-This is the format that backs the §7.21 patent claim cluster (kept private with counsel — see `kody-w/wildhaven-ceo/legal/patent/`). It is intentionally small and self-describing.
+| Schema | Kind | Payload shape | Hatcher route → destination | Status |
+|---|---|---|---|---|
+| `brainstem-egg/2.2-organism` | `organism` | ZIP: rappid + soul + .env + agents + organs + senses + services + .brainstem_data | hatch into `~/.brainstem/` or `~/.rapp/twins/<rappid>/` (full instance) | shipping |
+| `brainstem-egg/2.2-rapplication` | `rapplication` | ZIP: rappid + agent.py + UI + per-rapp state | install as a planted rapp under host brainstem | shipping |
+| **`brainstem-egg/2.3-session`** | **`session`** | **JSON: rappid + runtime payload (HTML/JS) + transcript + participants** | **mount in rappterbox console iframe (or vbrainstem.html standalone)** | **this doc** |
+| `brainstem-egg/2.3-neighborhood` | `neighborhood` | ZIP: rappid + neighborhood.json + members.json + agents/ + rapplications/ + ses/ + soul.md + CONSTITUTION.md + rar/index.json | mint a new GitHub repo (or local mirror) acting as a neighborhood gate | planned |
+| `brainstem-egg/2.3-estate` | `estate` | ZIP: public discovery surface + private "bones" repo pointer + sealed PII pointer | re-anchor the operator's whole multi-tier identity on a new substrate | planned |
 
-## The contract in one sentence
+The egg-cartridge ecosystem is **substrate-agnostic** — cartridges travel via AirDrop, USB, GitHub, Discord, email, NFC, QR. The format MUST round-trip across any of those without loss.
 
-A cart is `manifest + runtime + transcript`. The runtime is sha256-pinned. Replaying the transcript against the pinned runtime reproduces the session bit-for-bit.
+## How `egg_hatcher_agent.py` routes
 
-## Top-level fields
+The kernel agent reads any `.egg` from a path or URL, parses its `manifest.json` (or top-level JSON for session cartridges), and dispatches by `schema` / `type`:
 
-| field | type | required | meaning |
-|---|---|---|---|
-| `schema` | string | yes | Always `"rappterbox-cart/0.1"`. |
-| `rappid` | string | yes | The cart's identity — `rappid:v2:cart:@<owner>/<repo>#<name>:<32-hex>@<substrate>/<owner>/<repo>`. |
-| `name` | string | yes | Short slug. Match `<name>` in the rappid. |
-| `title` | string | yes | Human-readable display name. |
-| `description` | string | yes | One-line pitch shown in the console card. |
-| `parent_rappid` | string \| null | yes | The cart this branched from (another cart, an agent, or a rapplication). `null` for genesis carts. |
-| `branch_at_event` | int \| null | yes | The transcript event index in the parent at which this cart diverged. `null` if `parent_rappid` is null. |
-| `participants` | array | yes | Operator + AI participants. See below. |
-| `runtime` | object | yes | Embedded interactive runtime. See below. |
-| `transcript` | array | yes | Append-only event log. See below. |
-| `minted_at` | string (ISO 8601) | yes | When this cart file was packed. |
-| `minted_by` | string | yes | Rappid of the operator or agent that packed it. |
-
-## `participants[]`
-
-Each participant:
-
-```json
-{ "rappid": "operator", "role": "operator", "name": "you" }
-{ "rappid": "rappid:v2:agent:@kody-w/rappterbox#hello:abc...@github.com/kody-w/rappterbox", "role": "twin", "name": "Echo" }
+```
+HatchEgg(egg_path="/Volumes/usb/dad.egg")
+  → opens the file
+  → reads manifest.json (ZIP) OR parses as JSON (session)
+  → switch (manifest.type):
+      organism      → utils.bond.hatch_organism(...)        → ~/.rapp/twins/<rappid>/
+      rapplication  → utils.bond.hatch_rapplication(...)    → planted rapp dir
+      session       → returns "session cartridge — mount in rappterbox console:
+                              https://kody-w.github.io/rappterbox/console.html
+                              or vbrainstem.html — drag the .egg in"
+      neighborhood  → (planned) mint new GitHub repo via gh CLI + scaffold
+      estate        → (planned) re-anchor estate on target substrate
+      unknown       → "unknown egg kind '<kind>' — schema '<schema>'.
+                              Hatcher knows: organism, rapplication, session.
+                              See kody-w/rappterbox/carts/SCHEMA.md."
 ```
 
-Roles: `operator` | `twin` | `observer`. Exactly one operator per cart. Multiple twins allowed (multi-participant per §7.23).
+The hatcher NEVER guesses. If the cartridge has no recognized schema, it tells the operator and stops — no destructive routing.
 
-## `runtime`
+---
+
+## `brainstem-egg/2.3-session` — the session cartridge spec
+
+A session cartridge is structurally a single workflow session: one runtime that renders the interactive surface, one transcript that captures what happened inside it, and a manifest that names the rappid + lineage + participants. JSON-only (not ZIP) because there's no directory tree to compress — just one runtime + one transcript.
+
+### Top-level fields (all required unless noted)
+
+| field | type | meaning |
+|---|---|---|
+| `schema` | string | Always `"brainstem-egg/2.3-session"`. (Backwards-compat: legacy carts may use `"rappterbox-cart/0.1"` — the loader accepts both.) |
+| `type` | string | Always `"session"` (the egg kind). |
+| `rappid` | string | The cartridge's identity — `rappid:v2:cart:@<owner>/<repo>#<name>:<32-hex>@<substrate>/<owner>/<repo>`. |
+| `name` | string | Short slug. Match `<name>` in the rappid. |
+| `title` | string | Human-readable display name. |
+| `description` | string | One-line pitch shown in the rappterbox console card. |
+| `parent_rappid` | string \| null | The cartridge this branched from (another cartridge, an agent, or a rapplication). `null` for genesis. |
+| `branch_at_event` | int \| null | The transcript event index in the parent at which this cartridge diverged. |
+| `participants` | array | Operator + AI participants. See below. |
+| `runtime` | object | Embedded interactive runtime. See below. |
+| `transcript` | array | Append-only event log. See below. |
+| `exported_at` | string (ISO 8601) | When this cartridge was packed. |
+| `minted_at` | string (ISO 8601) | When this cartridge was packed (== exported_at for v0.1). |
+| `minted_by` | string | Rappid of the operator or agent that packed it. |
+| `implements` | array | Constitutional articles this cartridge honors — for spot-validation by hatchers. |
+
+### `participants[]`
+
+```json
+{ "rappid": "operator", "role": "operator", "name": "you", "sprite": "🧍" }
+{ "rappid": "rappid:v2:agent:@kody-w/RAPP#reporter-twin:hello@github.com/kody-w/RAPP",
+  "role": "twin", "name": "Reporter", "sprite": "📰",
+  "persona": "You are Reporter. Use the HackerNews agent to fetch today's top story…" }
+```
+
+Roles: `operator` | `coordinator` | `twin` | `observer`. Exactly one `operator` per cartridge. The `coordinator` is a special twin — the operator's autonomous proxy who drives workflows on their behalf.
+
+### `runtime`
 
 ```json
 {
@@ -48,33 +84,25 @@ Roles: `operator` | `twin` | `observer`. Exactly one operator per cart. Multiple
 }
 ```
 
-- `type`: `html` for v0.1 (HTML+inline JS). Reserved: `wasm`, `pyodide`.
+- `type`: `html` for v0.1 (HTML+inline JS). Reserved: `wasm`, `pyodide`, `iframe-url`.
 - `sha256`: hex digest of the payload string. The console verifies before mounting.
-- `payload`: full HTML document string. Mounted into an iframe via `srcdoc`. No external fetches required to render — everything inline.
+- `payload`: full HTML document string. Mounted into a sandboxed iframe via `srcdoc`. No external fetches required.
 
 Two cartridges sharing the same `runtime.sha256` share execution semantics — the console MAY cache by hash.
 
-## `transcript[]`
+### `transcript[]`
 
 Append-only ordered event log. Each event:
 
 ```json
-{ "event": <int>, "kind": "<string>", "ts": "<ISO 8601>", "by": "<rappid|operator>", "data": { ... } }
+{ "event": <int>, "event_id": "<peer>:<n>", "kind": "<string>", "ts": "<ISO 8601>", "by": "<rappid|operator>", "data": { ... } }
 ```
 
-Reserved kinds:
-
-- `session_start` — first event of every cart. `data: { runtime_sha256, participants_at_start }`.
-- `operator_input` — operator typed/spoke. `data: { text }`.
-- `twin_response` — a twin emitted output. `data: { text, twin_rappid }`.
-- `cart_state` — runtime emitted a state mutation worth replaying. `data: { ... }` (runtime-defined).
-- `branch` — operator forked the cart. `data: { new_cart_rappid }`.
-
-Custom kinds allowed; runtime owns interpretation. Console displays them in the operator-mic panel without needing to understand them.
+Reserved kinds: `session_start`, `operator_input`, `twin_response`, `cart_state`, `demo_step`, `branch`. Custom kinds allowed; runtime owns interpretation.
 
 ## Runtime ↔ console postMessage protocol
 
-The runtime iframe communicates with the console parent via `window.parent.postMessage`. All messages are JSON objects with a `kind` field.
+The runtime iframe communicates with the console parent via `window.parent.postMessage`. JSON objects with a `kind` field.
 
 **Runtime → console:**
 
@@ -82,27 +110,30 @@ The runtime iframe communicates with the console parent via `window.parent.postM
 |---|---|---|
 | `cart_ready` | `{}` | Runtime mounted, ready for input. |
 | `cart_event` | `{ event: {...} }` | Append this event to the transcript. |
-| `chat_request` | `{ text, twin_rappid? }` | Ask the console to dispatch to the local brainstem. |
+| `chat_request` | `{ corr, text, twin_rappid? }` | Ask the console to dispatch to the local brainstem. `corr` round-trips. |
 
 **Console → runtime:**
 
 | kind | data | meaning |
 |---|---|---|
-| `cart_init` | `{ transcript, participants, operator_rappid }` | Replay state on mount. |
-| `chat_response` | `{ text, twin_rappid }` | Brainstem's reply to the previous chat_request. |
-| `operator_mic` | `{ text }` | Operator interjected at console level (per §7.23.1(e)). |
+| `cart_init` *(or `egg_init`)* | `{ transcript, participants, operator_rappid }` | Replay state on mount. The runtime accepts both names for forward-compat. |
+| `chat_response` | `{ corr, text, twin_rappid }` | Brainstem's reply, correlated by `corr`. |
+| `operator_mic` | `{ text }` | Operator interjected at console level. |
 
 ## Determinism rule
 
-A cart MUST replay deterministically: re-mounting an unchanged cart with the same operator_input sequence MUST produce the same transcript. Runtimes that need entropy MUST seed a PRNG from the cart's rappid (treat the rappid as the seed). Runtimes that need the wall clock for display MAY use it but MUST NOT branch behavior on it.
+A session cartridge MUST replay deterministically: re-mounting an unchanged cartridge with the same `operator_input` sequence MUST produce the same transcript. Runtimes that need entropy MUST seed a PRNG from the cartridge's rappid.
 
-This is what makes carts ROM-like.
+## v0.4 plans
 
-## What changes in v0.2 (planned)
+- `brainstem-egg/2.3-neighborhood` + `2.3-estate` (see top table) — implemented
+- Sealed manifest signature using the operator's Binder ECDSA key (per WH-2026-001 Claim 4)
+- `imports[]` — recursive sub-cartridges (the §7.22 recursive sub-tether)
+- Base64 binary payloads (for WASM runtimes)
 
-- `runtime.payload` may be base64 (for binary WASM)
-- `transcript` events may carry `tool_calls[]` for finer-grained replay
-- Cross-cart references via `imports[]` (the recursive sub-tether of §7.22)
-- Sealed signature on the manifest using the operator's Binder key (per WH-2026-001 Claim 4)
+## See also
 
-v0.1 deliberately omits these. The job of v0.1 is to prove `manifest + runtime + transcript` round-trips through a console.
+- Master egg packer: [`rapp_brainstem/utils/bond.py`](https://github.com/kody-w/RAPP/blob/main/rapp_brainstem/utils/bond.py) (organism + rapplication)
+- Egg hatcher (introspection + routing): [`rapp_brainstem/agents/egg_hatcher_agent.py`](https://github.com/kody-w/RAPP/blob/main/rapp_brainstem/agents/egg_hatcher_agent.py)
+- vBrainstem (emits + consumes session cartridges): [`pages/vbrainstem.html`](https://github.com/kody-w/RAPP/blob/main/pages/vbrainstem.html)
+- Patent context: [`WH-2026-002 §7.21`](https://github.com/kody-w/wildhaven-ceo/blob/main/legal/patent/WH-2026-002-rappterbox-claim-cluster.md) (private)

@@ -562,7 +562,7 @@ bash ~/.brainstem/start.sh</pre>
   <section class="blade-panel" id="panel-carts">
     <div class="panel-head">Tether cartridges<span class="count" id="carts-count">0</span></div>
     <div class="carts-head">
-      <input type="file" id="cart-file" accept=".cart.json,.json,application/json" hidden>
+      <input type="file" id="cart-file" accept=".egg,.cart.json,.json,application/json" hidden>
       <button class="pick" id="cart-load">Load .cart.json</button>
       <button class="pick" id="cart-load-bundled" title="Load the bundled hello cart from carts/hello.cart.json">Load bundled · hello</button>
       <span class="hint-tx">drag a <code>.cart.json</code> here, or pick one. <a href="https://github.com/kody-w/rappterbox/blob/main/carts/SCHEMA.md" target="_blank" rel="noopener" style="color:var(--accent)">format</a></span>
@@ -895,8 +895,13 @@ async function loadCartFromText(text, sourceLabel) {
   let cart;
   try { cart = JSON.parse(text); }
   catch (e) { alert("Not valid JSON: " + e.message); return; }
-  if (cart.schema !== "rappterbox-cart/0.1") {
-    if (!confirm(`Cart schema is "${cart.schema}", expected "rappterbox-cart/0.1". Try anyway?`)) return;
+  // Accept both legacy rappterbox-cart/0.1 and the unified brainstem-egg/2.3-session
+  // schema. The latter is what vbrainstem.html now emits — same fields, new name,
+  // positioned as one variant of the universal egg format alongside organism /
+  // rapplication / neighborhood / estate eggs.
+  const accepted = ['rappterbox-cart/0.1', 'brainstem-egg/2.3-session'];
+  if (!accepted.includes(cart.schema)) {
+    if (!confirm(`Cart schema is "${cart.schema}", expected one of ${accepted.join(' / ')}. Try anyway?`)) return;
   }
   if (!cart.runtime || !cart.runtime.payload) {
     alert("Cart has no runtime.payload."); return;
