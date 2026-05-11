@@ -1,0 +1,43 @@
+{
+  "schema": "rappterbox-cart/0.1",
+  "rappid": "rappid:v2:cart:@kody-w/rappterbox#hello:c7fa93aa725e5237f7cce892780c7b20@github.com/kody-w/rappterbox",
+  "name": "hello",
+  "title": "Hello, Rappterbox",
+  "description": "Smallest end-to-end demo of the cart format. Click the counter (offline state, deterministic replay), or chat with the twin (network — local /chat).",
+  "parent_rappid": null,
+  "branch_at_event": null,
+  "participants": [
+    {
+      "rappid": "operator",
+      "role": "operator",
+      "name": "you"
+    },
+    {
+      "rappid": "rappid:v2:agent:@kody-w/rappterbox#twin:hello-twin@github.com/kody-w/rappterbox",
+      "role": "twin",
+      "name": "Twin"
+    }
+  ],
+  "runtime": {
+    "type": "html",
+    "sha256": "c7fa93aa725e5237f7cce892780c7b20ac888ed0a830e867a2144c6af12abcce",
+    "payload": "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>hello cart</title><style>\n*{box-sizing:border-box}html,body{margin:0;padding:0;background:#0a1422;color:#eaf2fb;font:14px/1.4 system-ui,-apple-system,Segoe UI,sans-serif;height:100%}\n.wrap{max-width:680px;margin:0 auto;padding:22px 24px;display:flex;flex-direction:column;gap:18px}\nh1{font-size:18px;margin:0;letter-spacing:.5px}\n.sub{color:#93a5bb;font-size:12px;margin-top:2px}\n.card{background:rgba(255,255,255,.04);border:1px solid rgba(141,169,196,.18);border-radius:8px;padding:16px}\n.card h3{margin:0 0 10px;font-size:13px;letter-spacing:.5px;color:#5fc4ff;text-transform:uppercase}\nbutton{background:linear-gradient(180deg,#5fc4ff,#3a8fc6);border:0;color:#04101e;padding:8px 14px;border-radius:5px;font-weight:600;cursor:pointer;font-size:13px}\nbutton:hover{filter:brightness(1.1)}\nbutton:disabled{opacity:.4;cursor:not-allowed}\n.counter{display:flex;align-items:center;gap:14px}\n.counter .n{font-size:34px;font-weight:600;color:#8fd960;font-variant-numeric:tabular-nums;min-width:60px}\ninput,textarea{background:rgba(0,0,0,.3);border:1px solid rgba(141,169,196,.28);color:#eaf2fb;padding:8px 10px;border-radius:5px;font:inherit;width:100%}\n.chat{display:flex;flex-direction:column;gap:8px;max-height:200px;overflow-y:auto;margin-bottom:10px}\n.msg{padding:6px 10px;border-radius:5px;font-size:13px}\n.msg.op{background:rgba(95,196,255,.12);align-self:flex-end;max-width:85%}\n.msg.tw{background:rgba(143,217,96,.10);align-self:flex-start;max-width:85%}\n.msg .who{font-size:10px;color:#93a5bb;letter-spacing:.5px;text-transform:uppercase;margin-bottom:2px}\n.composer{display:flex;gap:8px}\n.composer input{flex:1}\n.tx{font-family:ui-monospace,Consolas,Menlo,monospace;font-size:11px;color:#93a5bb;max-height:140px;overflow-y:auto;background:rgba(0,0,0,.2);padding:10px;border-radius:5px;border:1px solid rgba(141,169,196,.10);white-space:pre-wrap}\n.foot{color:#93a5bb;font-size:11px;text-align:center;letter-spacing:.5px}\n</style></head><body><div class=\"wrap\">\n<header><h1 id=\"title\">hello cart</h1><div class=\"sub\" id=\"parts\"></div></header>\n\n<div class=\"card\"><h3>Offline state · counter (no network, deterministic replay)</h3>\n<div class=\"counter\"><div class=\"n\" id=\"n\">0</div>\n<button id=\"bump\">+1</button>\n<button id=\"reset\">reset</button></div>\n<div class=\"sub\" style=\"margin-top:8px\">Each click emits a cart_event. Reload the cart and the count comes back.</div></div>\n\n<div class=\"card\"><h3>Brainstem-backed chat (network — local /chat)</h3>\n<div class=\"chat\" id=\"chat\"></div>\n<div class=\"composer\"><input id=\"msg\" placeholder=\"say something to the twin\" autocomplete=\"off\">\n<button id=\"send\">send</button></div></div>\n\n<div class=\"card\"><h3>Live transcript</h3><div class=\"tx\" id=\"tx\">(loading…)</div></div>\n\n<div class=\"foot\">cart runtime · v0.1 · self-contained · sha256 pinned</div>\n</div><script>\nconst $=(id)=>document.getElementById(id);\nlet transcript=[],participants=[],opRappid=\"operator\",twinRappid=null,n=0;\n\nfunction send(kind,data){window.parent.postMessage({kind,...data},\"*\")}\nfunction appendEvent(ev){transcript.push(ev);renderTx();send(\"cart_event\",{event:ev})}\nfunction renderTx(){$(\"tx\").textContent=transcript.map(e=>`[${e.event}] ${e.kind} ${JSON.stringify(e.data||{})}`).join(\"\\n\")||\"(empty)\"}\nfunction renderChat(){\n  const c=$(\"chat\");c.innerHTML=\"\";\n  for(const e of transcript){\n    if(e.kind===\"operator_input\"){const d=document.createElement(\"div\");d.className=\"msg op\";d.innerHTML=`<div class=\"who\">you</div>${escape(e.data.text)}`;c.appendChild(d)}\n    if(e.kind===\"twin_response\"){const d=document.createElement(\"div\");d.className=\"msg tw\";d.innerHTML=`<div class=\"who\">twin</div>${escape(e.data.text)}`;c.appendChild(d)}\n  }\n  c.scrollTop=c.scrollHeight;\n}\nfunction escape(s){return String(s).replace(/[&<>\"']/g,c=>({\"&\":\"&amp;\",\"<\":\"&lt;\",\">\":\"&gt;\",'\"':\"&quot;\",\"'\":\"&#39;\"}[c]))}\nfunction nextEv(){return transcript.length?Math.max(...transcript.map(e=>e.event))+1:0}\n\n// Counter — offline, deterministic\nfunction recomputeN(){n=transcript.filter(e=>e.kind===\"cart_state\"&&e.data.op===\"bump\").length-transcript.filter(e=>e.kind===\"cart_state\"&&e.data.op===\"reset_at\").reduce((acc,e)=>e.event>acc?e.event:acc,-1);\n  // simpler: replay\n  n=0;for(const e of transcript){if(e.kind===\"cart_state\"&&e.data.op===\"bump\")n++;if(e.kind===\"cart_state\"&&e.data.op===\"reset\")n=0}\n  $(\"n\").textContent=n;\n}\n$(\"bump\").onclick=()=>{appendEvent({event:nextEv(),kind:\"cart_state\",ts:new Date().toISOString(),by:opRappid,data:{op:\"bump\"}});recomputeN()}\n$(\"reset\").onclick=()=>{appendEvent({event:nextEv(),kind:\"cart_state\",ts:new Date().toISOString(),by:opRappid,data:{op:\"reset\"}});recomputeN()}\n\n// Chat — network\n$(\"send\").onclick=submit;\n$(\"msg\").addEventListener(\"keydown\",e=>{if(e.key===\"Enter\"){e.preventDefault();submit()}});\nfunction submit(){\n  const text=$(\"msg\").value.trim();if(!text)return;$(\"msg\").value=\"\";\n  appendEvent({event:nextEv(),kind:\"operator_input\",ts:new Date().toISOString(),by:opRappid,data:{text}});\n  renderChat();\n  send(\"chat_request\",{text,twin_rappid:twinRappid});\n}\n\n// Receive\nwindow.addEventListener(\"message\",ev=>{\n  const m=ev.data||{};\n  if(m.kind===\"cart_init\"){\n    transcript=(m.transcript||[]).slice();\n    participants=m.participants||[];\n    opRappid=m.operator_rappid||\"operator\";\n    const twin=participants.find(p=>p.role===\"twin\");\n    twinRappid=twin?twin.rappid:null;\n    $(\"title\").textContent=m.title||\"cart\";\n    $(\"parts\").textContent=participants.map(p=>`${p.name} (${p.role})`).join(\" · \");\n    recomputeN();renderChat();renderTx();\n  }\n  if(m.kind===\"chat_response\"){\n    appendEvent({event:nextEv(),kind:\"twin_response\",ts:new Date().toISOString(),by:m.twin_rappid||\"twin\",data:{text:m.text,twin_rappid:m.twin_rappid}});\n    renderChat();\n  }\n  if(m.kind===\"operator_mic\"){\n    appendEvent({event:nextEv(),kind:\"operator_input\",ts:new Date().toISOString(),by:opRappid,data:{text:m.text,via:\"mic\"}});\n    renderChat();send(\"chat_request\",{text:m.text,twin_rappid:twinRappid});\n  }\n});\n\nsend(\"cart_ready\",{});\n</script></body></html>\n"
+  },
+  "transcript": [
+    {
+      "event": 0,
+      "kind": "session_start",
+      "ts": "2026-05-11T00:47:43.057757+00:00",
+      "by": "operator",
+      "data": {
+        "runtime_sha256": "c7fa93aa725e5237f7cce892780c7b20ac888ed0a830e867a2144c6af12abcce",
+        "participants_at_start": [
+          "you",
+          "Twin"
+        ]
+      }
+    }
+  ],
+  "minted_at": "2026-05-11T00:47:43.057967+00:00",
+  "minted_by": "rappid:v2:agent:@kody-w/rappterbox#cart-pack:bootstrap@github.com/kody-w/rappterbox"
+}

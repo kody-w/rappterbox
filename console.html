@@ -310,6 +310,64 @@
   }
   a.btn:hover { background: linear-gradient(180deg, rgba(95,196,255,0.5), rgba(95,196,255,0.2)); color: white; }
 
+  /* ── Tether Carts blade ─────────────────────────────────────────── */
+  .carts-head { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  .carts-head .pick {
+    background: linear-gradient(180deg, rgba(95,196,255,0.3), rgba(95,196,255,0.12));
+    color: var(--accent);
+    border: 1px solid var(--border-hi);
+    border-radius: 6px;
+    padding: 8px 14px;
+    cursor: pointer;
+    font: inherit; font-size: 13px; font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .carts-head .pick:hover { background: linear-gradient(180deg, rgba(95,196,255,0.5), rgba(95,196,255,0.2)); color: white; }
+  .carts-head .hint-tx { color: var(--muted); font-size: 12px; }
+  .cart-stage {
+    background: rgba(0,0,0,0.4);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    min-height: 460px;
+    display: flex; flex-direction: column;
+  }
+  .cart-stage .bar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, var(--accent-soft), transparent);
+    font-size: 12px;
+  }
+  .cart-stage .bar .nm { font-weight: 700; color: var(--text); }
+  .cart-stage .bar .rid { color: var(--muted); font-family: ui-monospace, monospace; font-size: 11px; }
+  .cart-stage .bar .pill {
+    margin-left: auto;
+    padding: 3px 8px; border-radius: 99px;
+    background: rgba(143,217,96,0.15);
+    color: var(--green); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+    border: 1px solid rgba(143,217,96,0.3);
+  }
+  .cart-stage .bar .pill.bad { background: rgba(255,107,107,0.15); color: var(--red); border-color: rgba(255,107,107,0.3); }
+  .cart-stage .bar button.mic {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--border-hi);
+    border-radius: 4px;
+    padding: 4px 10px; font: inherit; font-size: 11px; cursor: pointer;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .cart-stage .bar button.mic:hover { color: white; background: var(--accent-soft); }
+  .cart-stage iframe {
+    flex: 1; min-height: 460px; width: 100%; border: 0; background: #0a1422;
+  }
+  .cart-empty {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 13px; text-align: center; padding: 40px 20px;
+  }
+  .cart-empty p { max-width: 380px; line-height: 1.6; }
+  .cart-empty code { color: var(--accent); }
+
   /* ── Play modal: chat with the cartridge ───────────────────────── */
   dialog#play {
     width: min(720px, 92vw);
@@ -464,6 +522,7 @@
   <button class="blade is-active" data-blade="cartridges">My Cartridges</button>
   <button class="blade" data-blade="estate">Twin Estate</button>
   <button class="blade" data-blade="marketplace">Marketplace</button>
+  <button class="blade" data-blade="carts">Tether Carts</button>
   <button class="blade" data-blade="system">System</button>
 </nav>
 
@@ -497,6 +556,20 @@
     <pre style="background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; font-size: 12px; color: var(--chrome);">curl -fsSL https://raw.githubusercontent.com/kody-w/RAR/main/agents/@kody-w/summon_twin_agent.py \
      -o ~/.brainstem/agents/summon_twin_agent.py
 bash ~/.brainstem/start.sh</pre>
+  </section>
+
+  <!-- ── Tether Carts blade — load .cart.json files into the runtime iframe ─ -->
+  <section class="blade-panel" id="panel-carts">
+    <div class="panel-head">Tether cartridges<span class="count" id="carts-count">0</span></div>
+    <div class="carts-head">
+      <input type="file" id="cart-file" accept=".cart.json,.json,application/json" hidden>
+      <button class="pick" id="cart-load">Load .cart.json</button>
+      <button class="pick" id="cart-load-bundled" title="Load the bundled hello cart from carts/hello.cart.json">Load bundled · hello</button>
+      <span class="hint-tx">drag a <code>.cart.json</code> here, or pick one. <a href="https://github.com/kody-w/rappterbox/blob/main/carts/SCHEMA.md" target="_blank" rel="noopener" style="color:var(--accent)">format</a></span>
+    </div>
+    <div class="cart-stage" id="cart-stage">
+      <div class="cart-empty" id="cart-empty"><p>No cart loaded.<br>Click <code>Load bundled · hello</code> to try the smallest end-to-end demo, or load any <code>.cart.json</code> file.</p></div>
+    </div>
   </section>
 
   <!-- ── System blade ────────────────────────────────────────────── -->
@@ -804,6 +877,130 @@ function appendTurn(role, text) {
   $("play-chat").scrollTop = $("play-chat").scrollHeight;
   return el;
 }
+
+// ── Tether Carts: load .cart.json into a sandboxed iframe and bridge to /chat ─
+// Implements the rappterbox-cart/0.1 contract (carts/SCHEMA.md). Per §7.21 the
+// cartridge embeds its own runtime; we mount it via iframe.srcdoc, sha256-verify
+// the runtime against runtime.sha256 in the manifest, and proxy chat_request
+// messages from the runtime to the local brainstem's /chat endpoint.
+let activeCart = null;
+
+async function sha256Hex(s) {
+  const buf = new TextEncoder().encode(s);
+  const h = await crypto.subtle.digest("SHA-256", buf);
+  return Array.from(new Uint8Array(h)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function loadCartFromText(text, sourceLabel) {
+  let cart;
+  try { cart = JSON.parse(text); }
+  catch (e) { alert("Not valid JSON: " + e.message); return; }
+  if (cart.schema !== "rappterbox-cart/0.1") {
+    if (!confirm(`Cart schema is "${cart.schema}", expected "rappterbox-cart/0.1". Try anyway?`)) return;
+  }
+  if (!cart.runtime || !cart.runtime.payload) {
+    alert("Cart has no runtime.payload."); return;
+  }
+  const computed = await sha256Hex(cart.runtime.payload);
+  const verified = computed === cart.runtime.sha256;
+  await mountCart(cart, verified, sourceLabel);
+}
+
+async function mountCart(cart, verified, sourceLabel) {
+  activeCart = cart;
+  const stage = $("cart-stage");
+  stage.innerHTML = "";
+  const bar = document.createElement("div");
+  bar.className = "bar";
+  const shortRid = (cart.rappid || "").split(":").slice(-1)[0].split("@")[0].slice(0, 12);
+  bar.innerHTML = `
+    <span class="nm">${escapeHtml(cart.title || cart.name || "cart")}</span>
+    <span class="rid">${escapeHtml(shortRid)}</span>
+    <button class="mic" id="cart-mic" title="Operator-mic interjection (per §7.23.1(e))">mic</button>
+    <span class="pill ${verified ? "" : "bad"}">${verified ? "sha256 ✓" : "sha256 ✗"}</span>
+  `;
+  stage.appendChild(bar);
+
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("sandbox", "allow-scripts allow-forms");
+  iframe.srcdoc = cart.runtime.payload;
+  stage.appendChild(iframe);
+
+  iframe.addEventListener("load", () => {
+    iframe.contentWindow.postMessage({
+      kind: "cart_init",
+      title: cart.title,
+      transcript: cart.transcript || [],
+      participants: cart.participants || [],
+      operator_rappid: (cart.participants || []).find(p => p.role === "operator")?.rappid || "operator",
+    }, "*");
+  });
+
+  document.getElementById("cart-mic").onclick = () => {
+    const text = prompt("Operator-mic interjection (delivered to all participants with priority):");
+    if (!text) return;
+    iframe.contentWindow.postMessage({ kind: "operator_mic", text }, "*");
+  };
+
+  // Park the iframe handle so the message handler can target it
+  activeCart.__iframe = iframe;
+  $("carts-count").textContent = "1";
+}
+
+window.addEventListener("message", async (ev) => {
+  const m = ev.data || {};
+  if (!activeCart) return;
+  if (ev.source !== activeCart.__iframe?.contentWindow) return; // ignore non-cart messages
+  if (m.kind === "cart_ready") {
+    // runtime announced it is mounted — already handled by load handler
+  } else if (m.kind === "cart_event") {
+    activeCart.transcript = activeCart.transcript || [];
+    activeCart.transcript.push(m.event);
+  } else if (m.kind === "chat_request") {
+    try {
+      const r = await fetch(`${BRAINSTEM_BASE}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_input: m.text, conversation_history: [] }),
+      });
+      if (!r.ok) throw new Error("brainstem returned " + r.status);
+      const data = await r.json();
+      const reply = data.response || data.message || JSON.stringify(data);
+      activeCart.__iframe.contentWindow.postMessage({
+        kind: "chat_response", text: reply, twin_rappid: m.twin_rappid || "twin",
+      }, "*");
+    } catch (e) {
+      activeCart.__iframe.contentWindow.postMessage({
+        kind: "chat_response",
+        text: "(brainstem unreachable — " + e.message + ")",
+        twin_rappid: "error",
+      }, "*");
+    }
+  }
+});
+
+$("cart-load").onclick = () => $("cart-file").click();
+$("cart-file").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const text = await f.text();
+  await loadCartFromText(text, f.name);
+});
+$("cart-load-bundled").onclick = async () => {
+  try {
+    const r = await fetch("carts/hello.cart.json");
+    if (!r.ok) throw new Error("status " + r.status);
+    await loadCartFromText(await r.text(), "carts/hello.cart.json");
+  } catch (e) { alert("Couldn't load bundled cart: " + e.message + "\n\nServe console.html via http (not file://) for fetch to work."); }
+};
+
+// Drag-and-drop onto the carts panel
+const cartsPanel = $("panel-carts");
+cartsPanel.addEventListener("dragover", e => { e.preventDefault(); });
+cartsPanel.addEventListener("drop", async (e) => {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0]; if (!f) return;
+  await loadCartFromText(await f.text(), f.name);
+});
 
 // ── Boot ───────────────────────────────────────────────────────────────
 pollHealth();
