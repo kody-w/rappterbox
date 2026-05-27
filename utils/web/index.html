@@ -1866,9 +1866,9 @@
       <h2 class="virtual-only">Welcome to your RAPP Brainstem (virtual)</h2>
       <h2 class="local-only">Welcome to your RAPP Brainstem</h2>
       <p class="virtual-only">I'm the browser-only twin of the local brainstem. Same <code>/chat</code> envelope. Same single-file <code>*_agent.py</code> contract. Same GitHub identity as the rest of RAPP.</p>
-      <p class="local-only">I'm running on your machine — Flask on port 7071, powered by your GitHub Copilot subscription. Same single-file <code>*_agent.py</code> contract as the rest of RAPP. Agents run directly in the Python process here, not in the browser.</p>
+      <p class="local-only">I'm running on your machine — Flask on port 7071, powered by the GitHub Copilot CLI. Same single-file <code>*_agent.py</code> contract as the rest of RAPP. Agents run directly in the Python process here, not in the browser.</p>
       <ul>
-        <li><strong>Sign in</strong> with the green button (top-right) to use your GitHub Copilot subscription.</li>
+        <li><strong>Sign in</strong> with the green button (top-right) to connect the GitHub Copilot CLI.</li>
         <li><strong>Binder</strong>: tap a card → "Play to hand" to hot-load that agent so I can call it.</li>
         <li><strong>Agents</strong>: drag a <code>.py</code> file anywhere on this window to install a new tool.</li>
         <li><strong>Install</strong>: get the real local brainstem with one curl command.</li>
@@ -1922,8 +1922,8 @@
       <div id="cpsignin-error" class="banner warn" hidden></div>
       <div id="cpsignin-step1">
         <p style="font-size:13px;color:#8b949e;margin-bottom:14px">
-          Same device-code flow the local <code>brainstem.py</code> uses. Unlocks the full Copilot model catalog
-          (Claude Sonnet/Opus, GPT-4o, o-series, Gemini, etc.) — your Copilot subscription is the engine.
+          Same device-code flow the local <code>brainstem.py</code> uses. Opens the Copilot model catalog
+          (Claude Sonnet/Opus, GPT-4o, o-series, Gemini, etc.) via the GitHub Copilot CLI.
         </p>
         <button class="btn primary" id="cpsignin-go" style="width:100%;padding:12px">Sign in with GitHub →</button>
       </div>
@@ -2895,7 +2895,7 @@ async function copilotExchange() {
     throw new Error(`copilot exchange ${r.status}: ${t.slice(0,300)}`);
   }
   const d = await r.json();
-  if (!d.token) throw new Error('Copilot returned no token (Copilot subscription required)');
+  if (!d.token) throw new Error('Copilot returned no token (check GitHub Copilot CLI access)');
   state.settings.copilotToken     = d.token;
   state.settings.copilotEndpoint  = (d.endpoints && d.endpoints.api) || COPILOT_DEFAULT_API;
   state.settings.copilotExpiresAt = (d.expires_at || (Date.now()/1000 + 600)) * 1000;
@@ -5795,7 +5795,7 @@ async function pushSwarmToEndpoint() {
 /* ───── Tutorial (port of BlazingBeard quest, web-flavored) ─── */
 const TUTORIAL_STEPS = [
   { phase: 'Welcome', title: 'You\'re in the RAPP Brainstem', time: '~30 sec',
-    desc: 'This is the browser-only twin of the local brainstem. Same <code>/chat</code> envelope, same single-file <code>*_agent.py</code> contract — your GitHub Copilot subscription powers it. Let me show you around in 9 quick steps.' },
+    desc: 'This is the browser-only twin of the local brainstem. Same <code>/chat</code> envelope, same single-file <code>*_agent.py</code> contract — the GitHub Copilot CLI powers it. Let me show you around in 9 quick steps.' },
   { phase: '🥚 Hatching', title: 'Sign in is done', time: '✓',
     desc: 'You\'re signed in via the GitHub Copilot device-code flow — same path the local brainstem uses. The session token auto-refreshes; you don\'t have to manage anything.',
     tip: '<strong>Status pill:</strong> top-right shows your GitHub identity and active model.' },

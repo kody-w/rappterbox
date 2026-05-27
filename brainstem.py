@@ -377,7 +377,7 @@ def get_copilot_token():
     
     if not copilot_token:
         _tlog("auth.copilot_no_token", level="error")
-        raise RuntimeError("Failed to get Copilot API token. Check your Copilot subscription.")
+        raise RuntimeError("Failed to get Copilot API token. Check your GitHub Copilot CLI access.")
     
     _copilot_token_cache = {
         "token": copilot_token,
