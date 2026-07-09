@@ -182,7 +182,7 @@ The console must accept all of these on summon. Cartridges that produce eggs sho
 {
   "schema": "brainstem-egg/2.1",
   "type": "twin",
-  "rappid": "rappid:twin:@<publisher>/<slug>:<entropy>",
+  "rappid": "rappid:@<publisher>/<slug>:<64hex>",
   "exported_at": "2026-05-04T...",
   "source": {
     "rappid_uuid": "<UUID4>",
@@ -203,6 +203,8 @@ The console must accept all of these on summon. Cartridges that produce eggs sho
   "attestation": null
 }
 ```
+
+> **Identity (Eternity form).** The top-level `rappid` is the consolidated Eternity string `rappid:@<publisher>/<slug>:<64hex>` — the `<64hex>` is the keyless identity hash (per `rapp-eternity/1.0` / CONSTITUTION Art. XXXIV.1/XXXVI.1: a stable UUID/commit-derived or content hash, **independent of the slug**), and `kind` is **not** in the string (it is carried by the sibling `"type"` field / the record). Legacy `rappid:v2:<kind>:@<owner>/<repo>:<32hex>@github.com/...` strings are read-forever and canonicalized on read — **never newly emitted**. (The `source.rappid_uuid` fields below are legacy provenance from pre-Eternity packs, preserved read-only.)
 
 ### 5.3 Payload layout
 
@@ -286,7 +288,7 @@ This document is `rappterbox-console-spec/1.0`. The schema is **frozen forever**
 - `rapp-agent/1.x` — cartridge manifest schema
 - `rapp-peers/1.x` — peer registry schema
 - `brainstem-egg/2.x` — egg cartridge schema
-- `rapp-rappid/1.x` — twin lineage schema
+- `rapp-rappid/2.x` — twin identity/lineage record (defers to `rapp-eternity/1.0`, the sole identity standard)
 
 All additive. Old readers ignore unknown fields. Old writers produce data that newer readers accept.
 
