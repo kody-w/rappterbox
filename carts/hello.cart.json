@@ -39,5 +39,5 @@
     }
   ],
   "minted_at": "2026-05-11T00:47:43.057967+00:00",
-  "minted_by": "rappid:v2:agent:@kody-w/rappterbox#cart-pack:bootstrap@github.com/kody-w/rappterbox"
+  "minted_by": "rappid:v2:agent:@kody-w/rappterbox#cart-pack:bootstrap@github.com/kody-w/rappterbox", "minted_by_note": "legacy v2 identity string (read-forever); packer now mints rapp/1"
 }

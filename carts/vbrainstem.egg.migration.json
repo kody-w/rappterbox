@@ -1,0 +1,7 @@
+{
+  "schema": "rapp/1-migration-note",
+  "egg": "carts/vbrainstem.egg",
+  "rappid": "rappid:@kody-w/vbrainstem:87933e0e7c9e867883882caacce27c53f0ae1cfee94e03972e7e11f50adb8e85",
+  "_migrated_from": "rappid:v2:cart:@kody-w/rappterbox#vbrainstem:f485a7ceacdbf4b4ef0beef4941042be@github.com/kody-w/rappterbox",
+  "note": "legacy v2 session cart re-packed as a conformant rapp/1-egg (read-forever; the embedded vbrainstem source is a frozen recording, not a live producer)"
+}
