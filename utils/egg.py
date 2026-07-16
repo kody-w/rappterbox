@@ -79,6 +79,71 @@ EGG_SCHEMA_V2 = "brainstem-egg/2.0"
 EGG_SCHEMA_V2_1 = "brainstem-egg/2.1"  # variant-repo aware (carries source pointer + brainstem pin)
 EGG_SCHEMA_V1 = "rapp-egg/1.0"  # legacy binder format
 
+# ── §9 rapp/1-egg packing (stdlib-only, inlined from kody-w/rapp-1 · rapp.py) ──
+EGG_SCHEMA = "rapp/1-egg"
+def _egg_canonical(v):
+    import json as _j
+    if v is None or isinstance(v,(bool,int)): return _j.dumps(v)
+    if isinstance(v,float): raise ValueError("no floats")
+    if isinstance(v,str): return _j.dumps(v,ensure_ascii=False)
+    if isinstance(v,list): return "["+",".join(_egg_canonical(x) for x in v)+"]"
+    if isinstance(v,dict):
+        return "{"+",".join(_j.dumps(k,ensure_ascii=False)+":"+_egg_canonical(v[k]) for k in sorted(v))+"}"
+    raise ValueError(type(v))
+def _egg_hb(space,b):
+    import hashlib as _h; return _h.sha256(space.encode()+b"\x0a"+b).hexdigest()
+def _now_iso_ms():
+    from datetime import datetime,timezone
+    n=datetime.now(timezone.utc); return n.strftime("%Y-%m-%dT%H:%M:%S.")+f"{n.microsecond//1000:03d}Z"
+class _EggCollector:
+    def __init__(self): self.files={}; self.meta={}
+    def __enter__(self): return self
+    def __exit__(self,*a): return False
+    def writestr(self,name,data):
+        import json as _j
+        o=data.encode("utf-8") if isinstance(data,str) else data
+        if name=="manifest.json": self.meta=_j.loads(o); return
+        self.files[name]=o
+    def write(self,fn,arc):
+        with open(fn,"rb") as _f: self.files[arc]=_f.read()
+def _pack_v9(variant,rappid,created,files,payload):
+    import io as _io, zipfile as _z
+    contents=sorted(({"path":p,"hash":_egg_hb("rapp/1:egg",o)} for p,o in files.items()),
+                    key=lambda c:c["path"].encode("utf-8"))
+    manifest={"schema":EGG_SCHEMA,"variant":variant,"rappid":rappid,"created_utc":created,
+              "contents":contents,"payload":payload or {},"sig":None}
+    buf=_io.BytesIO()
+    with _z.ZipFile(buf,"w",_z.ZIP_STORED) as zz:
+        def _w(n,d):
+            zi=_z.ZipInfo(n,date_time=(1980,1,1,0,0,0)); zi.compress_type=_z.ZIP_STORED; zi.flag_bits|=0x800
+            zz.writestr(zi,d)
+        _w("manifest.json",_egg_canonical(manifest).encode("utf-8"))
+        for c in contents: _w(c["path"],files[c["path"]])
+    return buf.getvalue()
+def _finalize_egg(z,variant):
+    import json as _j
+    meta=z.meta; rid=meta.get("rappid"); files=dict(z.files)
+    if variant=="rapplication":
+        cand=next((n for n in sorted(files) if n.endswith("_agent.py") or n.split("/")[-1]=="agent.py"),None)
+        if cand: files["agent.py"]=files.pop(cand)
+        for n in [n for n in list(files) if "/" not in n and n.endswith(".py") and n!="agent.py"]:
+            files["src/"+n]=files.pop(n)
+        if "agent.py" not in files: variant="organism"
+    if variant=="organism":
+        import json as _j
+        files.setdefault("soul.md",b"# soul\n")
+        if "rappid.json" not in files:
+            files["rappid.json"]=(_j.dumps({"schema":"rapp/1","rappid":rid,"parent_rappid":meta.get("parent_rappid"),"kind":"organism"},indent=2)+"\n").encode()
+    if not rid or not re.match(r"^rappid:@[a-z0-9-]+/[a-z0-9-]+:[0-9a-f]{64}$", rid):
+        import hashlib as _h
+        content=b"".join(files[k] for k in sorted(files))
+        slug=re.sub(r"[^a-z0-9]+","-",str(meta.get("name") or meta.get("slug") or "thing").lower()).strip("-") or "thing"
+        rid=f"rappid:@kody-w/{slug}:"+_egg_hb("rapp/1:rappid",_h.sha256(content).digest())
+    payload={k:v for k,v in meta.items() if k not in ("schema","type","rappid","exported_at","created_at","created_utc")}
+    return _pack_v9(variant,rid,_now_iso_ms(),files,payload)
+
+
+
 # ── RAPPID — perpetual, globally-unique digital identity ────────────────
 #
 # Every twin, rapp, and swarm has a RAPPID generated ONCE at first hatch.
@@ -132,8 +197,10 @@ def _make_rappid(type_: str, publisher: str, slug: str) -> str:
         publisher = "@" + publisher
     publisher = re.sub(r"[^@\w-]", "", publisher) or "@anon"
     slug = re.sub(r"[^\w-]", "_", slug or "unnamed").strip("_") or "unnamed"
-    entropy = secrets.token_hex(8)
-    return f"rappid:{type_}:{publisher}/{slug}:{entropy}"
+    _o = re.sub(r"[^a-z0-9]+","-", publisher.lstrip("@").lower()).strip("-") or "anon"
+    _s = re.sub(r"[^a-z0-9]+","-", slug.lower()).strip("-") or "unnamed"
+    import hashlib as _h, uuid as _u
+    return f"rappid:@{_o}/{_s}:"+_h.sha256(b"rapp/1:rappid\n"+_u.uuid4().bytes).hexdigest()  # §6.2 keyless
 
 
 def get_or_create_twin_rappid(publisher: str = "@anon",
@@ -262,7 +329,7 @@ def pack_rapplication(rapp_id: str, agent_filename: str,
     """Pack a single installed rapplication into an egg."""
     rappid = get_or_create_rapp_rappid(rapp_id, publisher=publisher)
     buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+    with _EggCollector() as z:
         # agent.py
         if agent_filename:
             agent_path = os.path.join(_AGENTS_DIR, agent_filename)
@@ -304,7 +371,7 @@ def pack_rapplication(rapp_id: str, agent_filename: str,
         }
         z.writestr("manifest.json", json.dumps(manifest, indent=2))
 
-    return buf.getvalue()
+    return _finalize_egg(z, "organism" if manifest.get("type") in ("twin","organism",None) else "rapplication")
 
 
 # ── Pack: twin ──────────────────────────────────────────────────────────
@@ -333,7 +400,7 @@ def pack_twin(twin_id: str, name: Optional[str] = None,
     buf = io.BytesIO()
     agent_count = 0
     state_count = 0
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+    with _EggCollector() as z:
         # All user-installed agents (skip core)
         if os.path.isdir(_AGENTS_DIR):
             for fname in sorted(os.listdir(_AGENTS_DIR)):
@@ -377,7 +444,7 @@ def pack_twin(twin_id: str, name: Optional[str] = None,
         }
         z.writestr("manifest.json", json.dumps(manifest, indent=2))
 
-    return buf.getvalue()
+    return _finalize_egg(z, "organism" if manifest.get("type") in ("twin","organism",None) else "rapplication")
 
 
 # ── Pack: snapshot ──────────────────────────────────────────────────────
@@ -397,7 +464,7 @@ def pack_snapshot(snapshot_id: str, name: Optional[str] = None,
     twin_rappid = get_or_create_twin_rappid(publisher=publisher, slug=snapshot_id)
     buf = io.BytesIO()
     counts = {"agents": 0, "services": 0, "ui": 0, "data": 0}
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+    with _EggCollector() as z:
         # All agents (incl. core — destination might not have them)
         if os.path.isdir(_AGENTS_DIR):
             for fname in sorted(os.listdir(_AGENTS_DIR)):
@@ -445,7 +512,7 @@ def pack_snapshot(snapshot_id: str, name: Optional[str] = None,
         }
         z.writestr("manifest.json", json.dumps(manifest, indent=2))
 
-    return buf.getvalue()
+    return _finalize_egg(z, "organism" if manifest.get("type") in ("twin","organism",None) else "rapplication")
 
 
 # ── Unpack ──────────────────────────────────────────────────────────────
@@ -748,7 +815,7 @@ def pack_twin_from_repo(repo_path: str,
     bs_block = rj.get("brainstem") or {}
 
     buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+    with _EggCollector() as z:
         repo_files = 0
         data_files = 0
 
