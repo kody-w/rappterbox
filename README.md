@@ -47,6 +47,8 @@ bash ~/.brainstem/start.sh
 | Pack | Cartridges | Purpose |
 |---|---|---|
 | **twin** ([`expansion_packs/twin/`](./expansion_packs/twin/)) | `SummonTwin`, `HatchEgg` | Generate new twin organisms in chat; import `.egg` cartridges from other devices and hatch them locally with identity, memory, and mutations preserved. |
+| **objective-autopilot** ([`expansion_packs/objective-autopilot/`](./expansion_packs/objective-autopilot/)) | `ObjectiveAutopilot` | Compile finite, continuous, or hybrid application objectives into versioned mission contracts with authorization, evidence, policy, budgets, and acceptance gates. |
+| **pokemon** ([`expansion_packs/pokemon/`](./expansion_packs/pokemon/)) | `Pokemon` | Fully encapsulated ROM-free Pokémon Red/Gold autonomous mission with persistent state, local viewer, takeover, verification, and recovery. |
 
 Future packs will land in `expansion_packs/`. Anyone can author their own — see [the cartridge contract](#the-cartridge-contract) below.
 

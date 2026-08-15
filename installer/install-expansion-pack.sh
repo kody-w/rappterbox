@@ -59,6 +59,29 @@ if [ ! -d "$TARGET_DIR" ]; then
     exit 1
 fi
 
+if [ -f "$PACK_DIR/system-requirements.txt" ]; then
+    while IFS= read -r command_name; do
+        case "$command_name" in
+            ""|\#*) continue ;;
+        esac
+        if ! command -v "$command_name" >/dev/null 2>&1; then
+            echo "FAIL: expansion pack '$PACK' requires system command: $command_name"
+            exit 1
+        fi
+    done < "$PACK_DIR/system-requirements.txt"
+fi
+
+if [ -f "$PACK_DIR/requirements.txt" ]; then
+    VENV_PIP="$BRAINSTEM_HOME/venv/bin/pip"
+    if [ ! -x "$VENV_PIP" ]; then
+        echo "FAIL: brainstem venv pip not found at $VENV_PIP"
+        exit 1
+    fi
+    echo "[rappterbox] installing Python dependencies for '$PACK'"
+    "$VENV_PIP" install --disable-pip-version-check -q \
+        -r "$PACK_DIR/requirements.txt"
+fi
+
 count=0
 skipped=0
 for f in "$PACK_DIR"/*_agent.py; do
