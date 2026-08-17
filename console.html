@@ -879,8 +879,8 @@ function appendTurn(role, text) {
 }
 
 // ── Tether Carts: load .cart.json into a sandboxed iframe and bridge to /chat ─
-// Implements the rappterbox-cart/0.1 contract (carts/SCHEMA.md). Per §7.21 the
-// cartridge embeds its own runtime; we mount it via iframe.srcdoc, sha256-verify
+// Implements the rappterbox-cart/0.1 contract (carts/SCHEMA.md). The cartridge
+// embeds its own runtime; we mount it via iframe.srcdoc, sha256-verify
 // the runtime against runtime.sha256 in the manifest, and proxy chat_request
 // messages from the runtime to the local brainstem's /chat endpoint.
 let activeCart = null;
@@ -921,7 +921,7 @@ async function mountCart(cart, verified, sourceLabel) {
   bar.innerHTML = `
     <span class="nm">${escapeHtml(cart.title || cart.name || "cart")}</span>
     <span class="rid">${escapeHtml(shortRid)}</span>
-    <button class="mic" id="cart-mic" title="Operator-mic interjection (per §7.23.1(e))">mic</button>
+    <button class="mic" id="cart-mic" title="Operator-mic interjection">mic</button>
     <span class="pill ${verified ? "" : "bad"}">${verified ? "sha256 ✓" : "sha256 ✗"}</span>
   `;
   stage.appendChild(bar);

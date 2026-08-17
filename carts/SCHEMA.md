@@ -127,8 +127,8 @@ A session cartridge MUST replay deterministically: re-mounting an unchanged cart
 ## v0.4 plans
 
 - `brainstem-egg/2.3-neighborhood` + `2.3-estate` (see top table) — implemented
-- Sealed manifest signature using the operator's Binder ECDSA key (per WH-2026-001 Claim 4)
-- `imports[]` — recursive sub-cartridges (the §7.22 recursive sub-tether)
+- Sealed manifest signature using the operator's Binder ECDSA key
+- `imports[]` — recursive sub-cartridges
 - Base64 binary payloads (for WASM runtimes)
 
 ## See also
@@ -136,4 +136,3 @@ A session cartridge MUST replay deterministically: re-mounting an unchanged cart
 - Master egg packer: [`rapp_brainstem/utils/bond.py`](https://github.com/kody-w/RAPP/blob/main/rapp_brainstem/utils/bond.py) (organism + rapplication)
 - Egg hatcher (introspection + routing): [`rapp_brainstem/agents/egg_hatcher_agent.py`](https://github.com/kody-w/RAPP/blob/main/rapp_brainstem/agents/egg_hatcher_agent.py)
 - vBrainstem (emits + consumes session cartridges): [`pages/vbrainstem.html`](https://github.com/kody-w/RAPP/blob/main/pages/vbrainstem.html)
-- Patent context: [`WH-2026-002 §7.21`](https://github.com/kody-w/wildhaven-ceo/blob/main/legal/patent/WH-2026-002-rappterbox-claim-cluster.md) (private)

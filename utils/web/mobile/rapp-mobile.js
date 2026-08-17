@@ -157,7 +157,7 @@ async function deleteTwin(twin_id) {
   }
 }
 
-// Import a twin bundle (e.g., Molly's cloud from the global registry).
+// Import a twin bundle (e.g., the CEO twin's cloud from the global registry).
 // The imported twin gets its OWN local twin_id; the bundle's cloud_id (if
 // present) is recorded as the origin for attribution but never used as
 // the LIVE identity (no secret = can't sign T2T as them).
