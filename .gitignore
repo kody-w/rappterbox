@@ -23,7 +23,8 @@ Thumbs.db
 # the user's home dir at ~/.brainstem/data/, ~/.rapp/, etc.)
 data/
 .brainstem_data/
-.rapp/
+.rapp/*
+!.rapp/member.md
 
 # Local secrets
 .env
