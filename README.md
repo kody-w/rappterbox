@@ -1,5 +1,9 @@
 # rappterbox console
 
+<!-- rapp1:network-header:start -->
+[![RAPP/1](https://kody-w.github.io/rapp-hive-public/portfolio/badges/rappterbox.svg)](https://github.com/kody-w/rapp-hive-public/blob/main/portfolio/repos/rappterbox.md) · **New to RAPP?** [Start here: get your Brainstem →](https://github.com/kody-w/rapp-installer#start-here)
+<!-- rapp1:network-header:end -->
+
 > **A static, local-first runtime for digital organisms — with a cartridge slot.**
 
 The rappterbox console is a small Python/Flask brainstem that boots on your machine, exposes a chat surface at `http://127.0.0.1:7071`, and loads `*_agent.py` cartridges from `agents/`. Think Wii: the hardware is sealed and never changes; the games are cartridges you swap in.
