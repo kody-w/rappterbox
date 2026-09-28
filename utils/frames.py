@@ -54,6 +54,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import secrets
 import threading
 import uuid
@@ -61,34 +62,98 @@ from datetime import datetime, timezone
 from typing import Optional
 
 
-# ── canonical RAPP content-addressing (spec §2/§3), embedded verbatim from
-#    the reference implementation kody-w/rapp-1 · rapp.py so this stays a
-#    dependency-free utility. Same bytes → same address, everywhere. ──
-def _canonical(v) -> str:
-    """RFC 8785 JCS over the exact-value domain (no floats). Returns UTF-8 str."""
+# ── canonical RAPP content-addressing (spec §4/§5), embedded verbatim from
+#    the reference implementation kody-w/rapp-1 · rapp.py at rev-17
+#    (f6bafe76735ba73510518810c8bc8cd133dcf527; `canonical`/`H` renamed
+#    `_canonical`/`_H`) so this stays a dependency-free utility.
+#    Same bytes → same address, everywhere. ──
+# §4 (b), RFC 7493 §2.1: surrogate code points and the 66 noncharacters are outside I-JSON.
+_NOT_IJSON_CHAR = re.compile(
+    "[\ud800-\udfff\ufdd0-\ufdef"
+    + "".join(chr(plane << 16 | 0xFFFE) + chr(plane << 16 | 0xFFFF) for plane in range(17))
+    + "]"
+)
+
+
+def _ijson_string(s):
+    """A §4 string or member name in JCS form; refuses a surrogate or a noncharacter (§4 (b))."""
+    bad = _NOT_IJSON_CHAR.search(s)
+    if bad:
+        raise ValueError(
+            f"string holds U+{ord(bad.group()):04X}, a surrogate or noncharacter outside I-JSON (§4 (b))"
+        )
+    return json.dumps(s, ensure_ascii=False)
+
+
+def _number_to_string(x):
+    """ECMA-262 Number::toString of a finite binary64 value: the RFC 8785 §3.2.2.3 number form."""
+    if x != x or x in (float("inf"), float("-inf")):
+        raise ValueError("NaN and infinities are outside the §4 domain")
+    if x == 0:
+        return "0"                          # both zeros; -0 serializes as 0
+    # repr() is the shortest digit string that round-trips (nearest, ties to even), the
+    # digits Number::toString picks; only the layout differs, so re-lay it out here.
+    mantissa, _, exponent = repr(abs(x)).partition("e")
+    whole, _, fraction = mantissa.partition(".")
+    digits = (whole + fraction).lstrip("0")
+    n = len(whole) + int(exponent or 0) - (len(whole) + len(fraction) - len(digits))
+    digits = digits.rstrip("0")
+    k = len(digits)                         # value = 0.digits * 10**n
+    if k <= n <= 21:
+        text = digits + "0" * (n - k)
+    elif 0 < n <= 21:
+        text = digits[:n] + "." + digits[n:]
+    elif -6 < n <= 0:
+        text = "0." + "0" * -n + digits
+    else:
+        text = digits[0] + ("." + digits[1:] if k > 1 else "") + "e" + ("+" if n > 0 else "-") + str(abs(n - 1))
+    return ("-" if x < 0 else "") + text
+
+
+def _canonical(v):
+    """RFC 8785 JCS over the §4 I-JSON domain. Returns the canonical form as a str (encode as UTF-8)."""
     if v is None or isinstance(v, bool):
         return json.dumps(v)
     if isinstance(v, int):
-        return json.dumps(v)
+        if abs(v) <= 2**53 - 1:
+            return json.dumps(v)
+        # §4 (c): a number is a binary64 value; an int outside +/-(2^53-1) is admitted only
+        # when it is one exactly (2**53 is, 2**53 + 1 is not), and then serializes as JCS does.
+        try:
+            as_binary64 = float(v)
+        except OverflowError:
+            as_binary64 = None
+        if as_binary64 != v:
+            raise ValueError("int is not exactly representable as binary64 (§4 (c)); carry it as a string")
+        return _number_to_string(as_binary64)
     if isinstance(v, float):
-        raise ValueError("floats require full-JCS number serialization; use ints/strings")
+        return _number_to_string(v)
     if isinstance(v, str):
-        return json.dumps(v, ensure_ascii=False)
+        return _ijson_string(v)
     if isinstance(v, list):
         return "[" + ",".join(_canonical(x) for x in v) + "]"
     if isinstance(v, dict):
-        keys = list(v.keys())
-        if len(set(keys)) != len(keys):
-            raise ValueError("duplicate keys not allowed in canonical form")
-        items = sorted(v.items(), key=lambda kv: kv[0].encode("utf-16-be"))
-        return "{" + ",".join(json.dumps(k, ensure_ascii=False) + ":" + _canonical(val)
-                              for k, val in items) + "}"
-    raise ValueError(f"uncanonicalizable type: {type(v).__name__}")
+        if not all(isinstance(k, str) for k in v):
+            raise ValueError("member names must be strings")
+        # RFC 8785 orders member names by UTF-16 code units; plain sorted()
+        # is code-POINT order and diverges for non-BMP keys.
+        keys = sorted(v.keys(), key=lambda k: k.encode("utf-16-be", "surrogatepass"))
+        if len(keys) != len(set(keys)):
+            raise ValueError("duplicate keys")
+        return "{" + ",".join(_ijson_string(k) + ":" + _canonical(v[k]) for k in keys) + "}"
+    raise ValueError(f"non-I-JSON value: {type(v)}")
 
 
-def _H(space: str, v) -> str:
-    """Domain-separated content address: sha256(space + \\x0a + canonical(v))."""
-    return hashlib.sha256(space.encode("utf-8") + b"\x0a" + _canonical(v).encode("utf-8")).hexdigest()
+# §5 (rev-17 E-7): every tag belongs to exactly one function; any other tag is refused.
+_H_SPACES = frozenset({"rapp/1:particle", "rapp/1:wave", "rapp/1:egg-manifest",
+                       "rapp/1:sealed-aad", "rapp/1:sealed-key-request"})
+_HB_SPACES = frozenset({"rapp/1:egg", "rapp/1:rappid", "rapp/1:grail", "rapp/1:seal"})
+
+
+def _H(space, v):
+    if not (isinstance(space, str) and space in _H_SPACES):
+        raise ValueError(f"§5: H (a value hash) is used only with the tags {sorted(_H_SPACES)}; refused {space!r}")
+    return hashlib.sha256(space.encode() + b"\x0a" + _canonical(v).encode("utf-8")).hexdigest()
 
 
 # Grammar-valid sentinel for a twin that has not minted an identity yet.
