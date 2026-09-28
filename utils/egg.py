@@ -56,14 +56,19 @@ imported by both the binder service (legacy compat) and brainstem.py
 from __future__ import annotations
 
 import base64
+import decimal
 import hashlib
 import io
 import json
 import os
 import re
 import secrets
+import struct
 import time
+import unicodedata
+import uuid
 import zipfile
+import zlib
 from typing import Optional
 
 # ── Paths (resolved relative to this file's brainstem root) ─────────────
@@ -79,19 +84,248 @@ EGG_SCHEMA_V2 = "brainstem-egg/2.0"
 EGG_SCHEMA_V2_1 = "brainstem-egg/2.1"  # variant-repo aware (carries source pointer + brainstem pin)
 EGG_SCHEMA_V1 = "rapp-egg/1.0"  # legacy binder format
 
-# ── §9 rapp/1-egg packing (stdlib-only, inlined from kody-w/rapp-1 · rapp.py) ──
+# ── §9 rapp/1-egg packing (stdlib-only, inlined from kody-w/rapp-1 · rapp.py at rev-17,
+#    f6bafe76735ba73510518810c8bc8cd133dcf527; names prefixed _egg_/_EGG_) ──
 EGG_SCHEMA = "rapp/1-egg"
+_EGG_MAX_CANONICAL = 1024 * 1024  # §4 (d): the ceiling on a canonical form
+_EGG_NOT_IJSON_CHAR = re.compile(
+    "[\ud800-\udfff\ufdd0-\ufdef"
+    + "".join(chr(plane << 16 | 0xFFFE) + chr(plane << 16 | 0xFFFF) for plane in range(17))
+    + "]"
+)
+
+
+def _egg_ijson_string(s):
+    """A §4 string or member name in JCS form; refuses a surrogate or a noncharacter (§4 (b))."""
+    bad = _EGG_NOT_IJSON_CHAR.search(s)
+    if bad:
+        raise ValueError(
+            f"string holds U+{ord(bad.group()):04X}, a surrogate or noncharacter outside I-JSON (§4 (b))"
+        )
+    return json.dumps(s, ensure_ascii=False)
+
+
+def _egg_number_to_string(x):
+    """ECMA-262 Number::toString of a finite binary64 value: the RFC 8785 §3.2.2.3 number form."""
+    if x != x or x in (float("inf"), float("-inf")):
+        raise ValueError("NaN and infinities are outside the §4 domain")
+    if x == 0:
+        return "0"                          # both zeros; -0 serializes as 0
+    # repr() is the shortest digit string that round-trips (nearest, ties to even), the
+    # digits Number::toString picks; only the layout differs, so re-lay it out here.
+    mantissa, _, exponent = repr(abs(x)).partition("e")
+    whole, _, fraction = mantissa.partition(".")
+    digits = (whole + fraction).lstrip("0")
+    n = len(whole) + int(exponent or 0) - (len(whole) + len(fraction) - len(digits))
+    digits = digits.rstrip("0")
+    k = len(digits)                         # value = 0.digits * 10**n
+    if k <= n <= 21:
+        text = digits + "0" * (n - k)
+    elif 0 < n <= 21:
+        text = digits[:n] + "." + digits[n:]
+    elif -6 < n <= 0:
+        text = "0." + "0" * -n + digits
+    else:
+        text = digits[0] + ("." + digits[1:] if k > 1 else "") + "e" + ("+" if n > 0 else "-") + str(abs(n - 1))
+    return ("-" if x < 0 else "") + text
+
+
 def _egg_canonical(v):
-    import json as _j
-    if v is None or isinstance(v,(bool,int)): return _j.dumps(v)
-    if isinstance(v,float): raise ValueError("no floats")
-    if isinstance(v,str): return _j.dumps(v,ensure_ascii=False)
-    if isinstance(v,list): return "["+",".join(_egg_canonical(x) for x in v)+"]"
-    if isinstance(v,dict):
-        return "{"+",".join(_j.dumps(k,ensure_ascii=False)+":"+_egg_canonical(v[k]) for k in sorted(v))+"}"
-    raise ValueError(type(v))
-def _egg_hb(space,b):
-    import hashlib as _h; return _h.sha256(space.encode()+b"\x0a"+b).hexdigest()
+    """RFC 8785 JCS over the §4 I-JSON domain. Returns the canonical form as a str (encode as UTF-8)."""
+    if v is None or isinstance(v, bool):
+        return json.dumps(v)
+    if isinstance(v, int):
+        if abs(v) <= 2**53 - 1:
+            return json.dumps(v)
+        # §4 (c): a number is a binary64 value; an int outside +/-(2^53-1) is admitted only
+        # when it is one exactly (2**53 is, 2**53 + 1 is not), and then serializes as JCS does.
+        try:
+            as_binary64 = float(v)
+        except OverflowError:
+            as_binary64 = None
+        if as_binary64 != v:
+            raise ValueError("int is not exactly representable as binary64 (§4 (c)); carry it as a string")
+        return _egg_number_to_string(as_binary64)
+    if isinstance(v, float):
+        return _egg_number_to_string(v)
+    if isinstance(v, str):
+        return _egg_ijson_string(v)
+    if isinstance(v, list):
+        return "[" + ",".join(_egg_canonical(x) for x in v) + "]"
+    if isinstance(v, dict):
+        if not all(isinstance(k, str) for k in v):
+            raise ValueError("member names must be strings")
+        # RFC 8785 orders member names by UTF-16 code units; plain sorted()
+        # is code-POINT order and diverges for non-BMP keys.
+        keys = sorted(v.keys(), key=lambda k: k.encode("utf-16-be", "surrogatepass"))
+        if len(keys) != len(set(keys)):
+            raise ValueError("duplicate keys")
+        return "{" + ",".join(_egg_ijson_string(k) + ":" + _egg_canonical(v[k]) for k in keys) + "}"
+    raise ValueError(f"non-I-JSON value: {type(v)}")
+
+
+def _egg_json_number(token):
+    """§4 (c): parse a number token as its nearest binary64 d; refuse unless d is finite and
+    Number::toString(d) denotes exactly the token's value (so 0.1 passes, 0.10000000000000001 does not)."""
+    d = float(token)                                   # correctly rounded, ties to even; overlong -> +/-inf
+    if d != d or d in (float("inf"), float("-inf")):
+        raise ValueError(f"number token {token[:40]} is not a finite binary64 value (§4 (c))")
+    try:
+        same = decimal.Decimal(token) == decimal.Decimal(_egg_number_to_string(d))
+    except ArithmeticError:
+        # An exponent beyond decimal's range. d is finite, so it is a zero, and the token
+        # denotes the same value iff every digit of its significand is zero.
+        same = not any(c in "123456789" for c in token.lower().partition("e")[0])
+    if not same:
+        raise ValueError(f"number token {token[:40]} does not survive the binary64 round trip (§4 (c))")
+    return d
+
+
+def _egg_json_int(token):
+    if token == "-0":
+        return -0.0          # E-9: -0 is not an integer token a field rule may take for 0; _egg_canonical(-0.0) is "0"
+    d = _egg_json_number(token)  # refuses 9007199254740993 and overlong tokens before int() runs
+    value = int(token)
+    # 10**23 passes §4 (c) (its d prints as "1e+23") but is not d; the value parsed is d itself.
+    return value if value == d else int(d)
+
+
+def _egg_names_ok(value):
+    """§4 (rev-17 E-5, E-6): a producer treats every `payload` member name, at any depth, as a new string.
+
+    It refuses (never normalizes) a name that is not NFC or that holds a code point unassigned
+    (General_Category Cn) in the Unicode version this Python implements."""
+    stack = [value]
+    while stack:
+        current = stack.pop()
+        if isinstance(current, dict):
+            for name, item in current.items():
+                if not isinstance(name, str):
+                    raise ValueError("payload member names must be strings")
+                if not unicodedata.is_normalized("NFC", name):
+                    raise ValueError(f"payload member name is not NFC (§4): {name!r}")
+                if any(unicodedata.category(char) == "Cn" for char in name):
+                    raise ValueError(f"payload member name holds an unassigned code point (§4): {name!r}")
+                stack.append(item)
+        elif isinstance(current, list):
+            stack.extend(current)
+
+
+_EGG_WINDOWS_RESERVED = {
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    *{f"COM{i}" for i in range(1, 10)},
+    *{f"LPT{i}" for i in range(1, 10)},
+}
+
+
+def _egg_path_valid(path):
+    if (
+        not isinstance(path, str)
+        or not path
+        or path.startswith("/")
+        or "\\" in path
+        or path != unicodedata.normalize("NFC", path)
+        or re.match(r"^[A-Za-z]:", path)
+    ):
+        return False
+    parts = path.split("/")
+    for part in parts:
+        if (
+            part in ("", ".", "..")
+            or part.endswith((" ", "."))
+            or ":" in part
+            or any(ord(char) < 32 for char in part)
+            or part.split(".", 1)[0].upper() in _EGG_WINDOWS_RESERVED
+        ):
+            return False
+    return True
+
+
+_EGG_ZIP_LOCAL = struct.Struct("<IHHHHHIIIHH")          # 30-octet local file header
+_EGG_ZIP_CENTRAL = struct.Struct("<IHHHHHHIIIHHHHHII")  # 46-octet central directory header
+_EGG_ZIP_END = struct.Struct("<IHHHHIIH")               # 22-octet end-of-central-directory record
+_EGG_ZIP_VERSION = 0x0014                               # §9.1: version needed 20, version made by 0x0014
+_EGG_ZIP_FLAGS = 0x0800                                 # §9.1: UTF-8 name; no data descriptor, no encryption
+_EGG_ZIP_DOS_TIME, _EGG_ZIP_DOS_DATE = 0x0000, 0x0021       # §9.1: 1980-01-01 00:00:00
+_EGG_ZIP_MAX_ENTRIES = 0xFFFE                           # 0xFFFF is the ZIP64 marker
+_EGG_ZIP_MAX_FIELD = 0xFFFFFFFE                         # 0xFFFFFFFF is the ZIP64 marker
+
+
+def _egg_zip_pack(entries):
+    """§9.1 container writer: [(name, octets)] in entry order -> bytes, every header field as pinned.
+
+    Refuses (ValueError) an archive that would need ZIP64: more than 65,534 entries, or any
+    size or offset above 0xFFFFFFFE."""
+    if len(entries) > _EGG_ZIP_MAX_ENTRIES:
+        raise ValueError("egg needs more than 65,534 ZIP entries; ZIP64 is not a §9.1 container")
+    local, central, offset = [], [], 0
+    for name, data in entries:
+        encoded = name.encode("utf-8")
+        if len(encoded) > 0xFFFF:
+            raise ValueError(f"ZIP entry name exceeds 65,535 octets: {name!r}")
+        if len(data) > _EGG_ZIP_MAX_FIELD or offset > _EGG_ZIP_MAX_FIELD:
+            raise ValueError("egg needs a ZIP size or offset above 0xFFFFFFFE; ZIP64 is not a §9.1 container")
+        crc = zlib.crc32(data) & 0xFFFFFFFF
+        fields = (_EGG_ZIP_FLAGS, 0, _EGG_ZIP_DOS_TIME, _EGG_ZIP_DOS_DATE, crc, len(data), len(data), len(encoded), 0)
+        header = _EGG_ZIP_LOCAL.pack(0x04034B50, _EGG_ZIP_VERSION, *fields) + encoded
+        central.append(_EGG_ZIP_CENTRAL.pack(0x02014B50, _EGG_ZIP_VERSION, _EGG_ZIP_VERSION, *fields, 0, 0, 0, 0, offset) + encoded)
+        local += [header, data]
+        offset += len(header) + len(data)
+    directory = b"".join(central)
+    if offset > _EGG_ZIP_MAX_FIELD or len(directory) > _EGG_ZIP_MAX_FIELD:
+        raise ValueError("egg needs a ZIP size or offset above 0xFFFFFFFE; ZIP64 is not a §9.1 container")
+    end = _EGG_ZIP_END.pack(0x06054B50, 0, 0, len(entries), len(entries), len(directory), offset, 0)
+    return b"".join(local) + directory + end
+
+
+_EGG_HB_SPACES = frozenset({"rapp/1:egg", "rapp/1:rappid", "rapp/1:grail", "rapp/1:seal"})
+
+
+def _egg_hb(space, b):
+    """§5 (rev-17 E-7): Hb, the octet hash, takes only its own tags; any other tag is refused."""
+    if not (isinstance(space, str) and space in _EGG_HB_SPACES):
+        raise ValueError(f"§5: Hb is used only with the tags {sorted(_EGG_HB_SPACES)}; refused {space!r}")
+    return hashlib.sha256(space.encode() + b"\x0a" + b).hexdigest()
+
+
+def _egg_strict_json(octets):
+    """One §4 JSON text (octets) -> value, refusing what rapp.py::_strict_json refuses."""
+    if octets.startswith(b"\xef\xbb\xbf"):
+        raise ValueError("JSON text starts with a byte-order mark (§4)")
+    text = octets.decode("utf-8")
+
+    def pairs(items):
+        out = {}
+        for k, v in items:
+            if k in out:
+                raise ValueError(f"duplicate JSON member: {k}")
+            out[k] = v
+        return out
+
+    def constant(token):
+        raise ValueError(f"{token} is not a JSON number (§4 (c))")
+
+    try:
+        value = json.loads(text, object_pairs_hook=pairs, parse_float=_egg_json_number,
+                           parse_int=_egg_json_int, parse_constant=constant)
+    except RecursionError:
+        raise ValueError("JSON nesting depth exceeds 64 (§4 (d))") from None
+    stack = [(value, 1)]
+    while stack:
+        cur, depth = stack.pop()
+        for item in cur.values() if isinstance(cur, dict) else cur if isinstance(cur, list) else ():
+            if isinstance(item, (dict, list)):
+                if depth + 1 > 64:
+                    raise ValueError("JSON nesting depth exceeds 64 (§4 (d))")
+                stack.append((item, depth + 1))
+    if len(_egg_canonical(value).encode("utf-8")) > _EGG_MAX_CANONICAL:
+        raise ValueError("canonical JSON exceeds the 1 MiB ceiling (§4 (d))")
+    return value
+
+
 def _now_iso_ms():
     from datetime import datetime,timezone
     n=datetime.now(timezone.utc); return n.strftime("%Y-%m-%dT%H:%M:%S.")+f"{n.microsecond//1000:03d}Z"
@@ -107,19 +341,29 @@ class _EggCollector:
     def write(self,fn,arc):
         with open(fn,"rb") as _f: self.files[arc]=_f.read()
 def _pack_v9(variant,rappid,created,files,payload):
-    import io as _io, zipfile as _z
+    # §9.3 Producer (rapp.py::pack_egg): refuse every egg a consumer refuses; unsigned organism/rapplication only.
+    if variant not in ("organism","rapplication"): raise ValueError(f"unknown variant: {variant!r}")
+    if not _canon_match(rappid): raise ValueError(f"egg rappid is not a §6.1 rappid: {rappid!r}")
+    if not isinstance(payload,dict): raise ValueError("egg payload MUST be an object")
+    _egg_names_ok(payload)
+    for p,o in files.items():
+        if not _egg_path_valid(p): raise ValueError(f"egg path violates the §9.1 path grammar: {p!r}")
+        if not isinstance(o,bytes): raise ValueError(f"egg file octets MUST be bytes: {p!r}")
+    if "manifest.json" in files: raise ValueError("egg contents MUST NOT hold the root path manifest.json")
+    need={"rappid.json","soul.md"} if variant=="organism" else {"rappid.json"}
+    if not need<=set(files): raise ValueError(f"§9.2: a {variant} egg MUST hold {sorted(need)}")
+    ident=_egg_strict_json(files["rappid.json"])
+    if not isinstance(ident,dict) or ident.get("schema","rapp/1")!="rapp/1" or ident.get("rappid")!=rappid:
+        raise ValueError("§9.2: rappid.json MUST be an object (schema rapp/1 when present) naming the egg's rappid")
+    if variant=="rapplication" and [n for n in files if "/" not in n and n.endswith(".py")]!=["agent.py"]:
+        raise ValueError("§9.2: a rapplication MUST have exactly one root agent.py")
     contents=sorted(({"path":p,"hash":_egg_hb("rapp/1:egg",o)} for p,o in files.items()),
                     key=lambda c:c["path"].encode("utf-8"))
     manifest={"schema":EGG_SCHEMA,"variant":variant,"rappid":rappid,"created_utc":created,
-              "contents":contents,"payload":payload or {},"sig":None}
-    buf=_io.BytesIO()
-    with _z.ZipFile(buf,"w",_z.ZIP_STORED) as zz:
-        def _w(n,d):
-            zi=_z.ZipInfo(n,date_time=(1980,1,1,0,0,0)); zi.compress_type=_z.ZIP_STORED; zi.flag_bits|=0x800
-            zz.writestr(zi,d)
-        _w("manifest.json",_egg_canonical(manifest).encode("utf-8"))
-        for c in contents: _w(c["path"],files[c["path"]])
-    return buf.getvalue()
+              "contents":contents,"payload":payload,"sig":None}
+    man=_egg_canonical(manifest).encode("utf-8")
+    if len(man)>_EGG_MAX_CANONICAL: raise ValueError("canonical manifest exceeds the 1 MiB ceiling (§4 (d))")
+    return _egg_zip_pack([("manifest.json",man)]+[(c["path"],files[c["path"]]) for c in contents])
 def _finalize_egg(z,variant):
     import json as _j
     meta=z.meta; rid=meta.get("rappid"); files=dict(z.files)
@@ -129,16 +373,16 @@ def _finalize_egg(z,variant):
         for n in [n for n in list(files) if "/" not in n and n.endswith(".py") and n!="agent.py"]:
             files["src/"+n]=files.pop(n)
         if "agent.py" not in files: variant="organism"
-    if variant=="organism":
-        import json as _j
-        files.setdefault("soul.md",b"# soul\n")
-        if "rappid.json" not in files:
-            files["rappid.json"]=(_j.dumps({"schema":"rapp/1","rappid":rid,"parent_rappid":meta.get("parent_rappid"),"kind":"organism"},indent=2)+"\n").encode()
-    if not rid or not re.match(r"^rappid:@[a-z0-9-]+/[a-z0-9-]+:[0-9a-f]{64}$", rid):
+    if variant=="organism": files.setdefault("soul.md",b"# soul\n")
+    if not _canon_match(rid):
+        # A legacy or missing identity cannot travel in a rapp/1-egg (§6.1): derive the stand-in BEFORE
+        # rappid.json names the egg's identity, so the two agree (§9.2).
         import hashlib as _h
         content=b"".join(files[k] for k in sorted(files))
-        slug=re.sub(r"[^a-z0-9]+","-",str(meta.get("name") or meta.get("slug") or "thing").lower()).strip("-") or "thing"
+        slug=_canon_label(str(meta.get("name") or meta.get("slug") or "thing"),"thing")
         rid=f"rappid:@kody-w/{slug}:"+_egg_hb("rapp/1:rappid",_h.sha256(content).digest())
+    if "rappid.json" not in files:
+        files["rappid.json"]=(_j.dumps({"schema":"rapp/1","rappid":rid,"parent_rappid":meta.get("parent_rappid"),"kind":variant},indent=2)+"\n").encode()
     payload={k:v for k,v in meta.items() if k not in ("schema","type","rappid","exported_at","created_at","created_utc")}
     return _pack_v9(variant,rid,_now_iso_ms(),files,payload)
 
@@ -153,21 +397,46 @@ def _finalize_egg(z,variant):
 # anyone can verify "this is that twin." The host is mortal. The RAPPID
 # is not.
 #
-# Format:  rappid:<type>:<publisher>/<slug>:<entropy>
-#   type      twin | rapp | swarm
-#   publisher GitHub-style handle, e.g. @kody-w or @rapp
-#   slug      human-readable name within the publisher namespace
-#   entropy   16 hex chars from secrets.token_hex(8) — irreproducible
+# Format (canonical RAPP, spec §6.1):  rappid:@<owner>/<slug>:<64-hex>
+#   owner   GitHub-style handle without the @, e.g. kody-w
+#   slug    lowercase [a-z0-9] with internal hyphens (no underscores)
+#   tail    64 hex — the keyless mint Hb("rapp/1:rappid", uuid4_bytes),
+#           domain separated; NEVER a hash of the name (spec §6.2)
+# An organism's kind (twin/rapp/swarm) lives in its manifest, not the string.
 #
 # Storage: .brainstem_data/identity.json
-#   { "twin": "rappid:twin:@kody-w/personal:f7a3b2c1d4e5a8b9",
-#     "rapps": {"kanban": "rappid:rapp:@kody-w/kanban:9d8e7f6a5b4c3d2e"} }
+#   { "twin": "rappid:@kody-w/personal:<64-hex>",
+#     "rapps": {"kanban": "rappid:@kody-w/kanban:<64-hex>"} }
 #
 # A snapshot egg packs identity.json so the destination brainstem inherits
 # the source's RAPPIDs. Re-hatching ≠ new identity.
 
 _IDENTITY_FILE = os.path.join(_DATA_DIR, "identity.json")
-_RAPPID_RE = re.compile(r"^rappid:(twin|rapp|swarm):(@[\w-]+)/([\w-]+):([0-9a-f]{16})$")
+# Canonical RAPP grammar (spec §6.1): rappid:@<owner>/<slug>:<64-hex>.
+_CANON_RAPPID_RE = re.compile(
+    r"^rappid:@([a-z0-9]+(?:-[a-z0-9]+)*)/([a-z0-9]+(?:-[a-z0-9]+)*):([0-9a-f]{64})$")
+# Legacy pre-RAPP form (rappid:<type>:@pub/slug:<16-hex>). Retained ONLY so a
+# brainstem that already stored a legacy identity is still recognized and NOT
+# re-minted (which would lose its identity). New mints are always canonical.
+_LABEL_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+_LEGACY_RAPPID_RE = re.compile(r"^rappid:(twin|rapp|swarm):(@[\w-]+)/([\w-]+):([0-9a-f]{16})$")
+
+
+def _is_known_rappid(s: str) -> bool:
+    """True if `s` is a rappid we recognize — canonical (preferred) or a
+    legacy stored form we must not clobber."""
+    return bool(isinstance(s, str) and (_CANON_RAPPID_RE.match(s) or _LEGACY_RAPPID_RE.match(s)))
+
+
+def _canon_match(s):
+    """The §6.1 match of the WHOLE string `s` (owner 1-39, slug 1-100
+    characters), or None. `re.match` with `$` also accepts a trailing newline."""
+    m = _CANON_RAPPID_RE.fullmatch(s) if isinstance(s, str) else None
+    return m if m and len(m.group(1)) <= 39 and len(m.group(2)) <= 100 else None
+
+
+def _is_label(s, longest: int) -> bool:
+    return isinstance(s, str) and bool(_LABEL_RE.fullmatch(s)) and len(s) <= longest
 
 
 def _read_identity() -> dict:
@@ -191,25 +460,42 @@ def _write_identity(data: dict) -> None:
         json.dump(data, f, indent=2)
 
 
+def _canon_label(s: str, fallback: str, longest: int = 100) -> str:
+    """Coerce to a canonical §6.1 label: lowercase [a-z0-9] with single
+    internal hyphens, no leading/trailing/double hyphens, no underscores,
+    at most `longest` characters (owner 39, slug 100)."""
+    s = re.sub(r"[^a-z0-9]+", "-", (s or "").lower()).strip("-")
+    return re.sub(r"-+", "-", s)[:longest].strip("-") or fallback
+
+
 def _make_rappid(type_: str, publisher: str, slug: str) -> str:
-    """Generate a fresh RAPPID. Called ONCE per organism, ever."""
-    if not publisher.startswith("@"):
-        publisher = "@" + publisher
-    publisher = re.sub(r"[^@\w-]", "", publisher) or "@anon"
-    slug = re.sub(r"[^\w-]", "_", slug or "unnamed").strip("_") or "unnamed"
-    _o = re.sub(r"[^a-z0-9]+","-", publisher.lstrip("@").lower()).strip("-") or "anon"
-    _s = re.sub(r"[^a-z0-9]+","-", slug.lower()).strip("-") or "unnamed"
-    import hashlib as _h, uuid as _u
-    return f"rappid:@{_o}/{_s}:"+_h.sha256(b"rapp/1:rappid\n"+_u.uuid4().bytes).hexdigest()  # §6.2 keyless
+    """Mint a fresh canonical rappid (spec §6.2, keyless). Called ONCE per
+    organism, ever.
+
+    The tail is ``Hb("rapp/1:rappid", uuid4_bytes)`` — 64 hex, domain
+    separated — never a hash of the name. ``type_`` (twin/rapp/swarm) is the
+    caller's bookkeeping only; an organism's kind lives in its manifest, not
+    inside the rappid string, so it is not encoded here.
+
+    ``publisher`` ("@owner" or "owner") and ``slug`` must already be §6.1
+    labels (owner 1-39, slug 1-100 characters): anything else is refused,
+    never renamed (rapp.py::mint_rappid). The get_or_create_* entry points
+    derive those labels from free-form names first (``_canon_label``)."""
+    pub = publisher[1:] if isinstance(publisher, str) and publisher.startswith("@") else publisher
+    if not (_is_label(pub, 39) and _is_label(slug, 100)):
+        raise ValueError("owner or slug violates the RAPPID grammar (spec §6.1)")
+    tail = hashlib.sha256(b"rapp/1:rappid" + b"\x0a" + uuid.uuid4().bytes).hexdigest()
+    return f"rappid:@{pub}/{slug}:{tail}"
 
 
 def get_or_create_twin_rappid(publisher: str = "@anon",
                               slug: str = "personal") -> str:
     """Return this brainstem's twin RAPPID, minting one on first call."""
     ident = _read_identity()
-    if ident.get("twin") and _RAPPID_RE.match(ident["twin"]):
+    if ident.get("twin") and _is_known_rappid(ident["twin"]):
         return ident["twin"]
-    new = _make_rappid("twin", publisher, slug)
+    new = _make_rappid("twin", _canon_label(publisher.lstrip("@"), "anon", 39),
+                       _canon_label(slug, "unnamed"))
     ident["twin"] = new
     _write_identity(ident)
     return new
@@ -219,25 +505,41 @@ def get_or_create_rapp_rappid(rapp_id: str, publisher: str = "@anon") -> str:
     """Return a rapp's RAPPID, minting one on first call. Per-rapp scope."""
     ident = _read_identity()
     rapps = ident.setdefault("rapps", {})
-    if rapps.get(rapp_id) and _RAPPID_RE.match(rapps[rapp_id]):
+    if rapps.get(rapp_id) and _is_known_rappid(rapps[rapp_id]):
         return rapps[rapp_id]
-    new = _make_rappid("rapp", publisher, rapp_id)
+    new = _make_rappid("rapp", _canon_label(publisher.lstrip("@"), "anon", 39),
+                       _canon_label(rapp_id, "unnamed"))
     rapps[rapp_id] = new
     _write_identity(ident)
     return new
 
 
 def parse_rappid(rappid: str) -> Optional[dict]:
-    """Decompose a RAPPID string into its components, or None if invalid."""
+    """Decompose a rappid string into its components, or None if invalid.
+
+    Accepts the canonical form (spec §6.1) and, for back-compat, the legacy
+    ``rappid:<type>:@pub/slug:<16-hex>`` form. `hash` is the identity tail;
+    `type` is None for canonical rappids (kind lives in the manifest)."""
     if not isinstance(rappid, str):
         return None
-    m = _RAPPID_RE.match(rappid)
+    m = _canon_match(rappid)
+    if m:
+        return {
+            "type":      None,
+            "publisher": "@" + m.group(1),
+            "slug":      m.group(2),
+            "hash":      m.group(3),
+            "entropy":   m.group(3),   # compat alias
+            "rappid":    rappid,
+        }
+    m = _LEGACY_RAPPID_RE.match(rappid)
     if not m:
         return None
     return {
         "type":      m.group(1),
         "publisher": m.group(2),
         "slug":      m.group(3),
+        "hash":      m.group(4),
         "entropy":   m.group(4),
         "rappid":    rappid,
     }
@@ -838,7 +1140,7 @@ def pack_twin_from_repo(repo_path: str,
         manifest = {
             "schema": EGG_SCHEMA_V2_1,
             "type": "twin",
-            "rappid": rj.get("name") and f"rappid:twin:@source/{rj['name']}:{secrets.token_hex(8)}" or None,
+            "rappid": rappid_uuid,  # the source twin's own rappid (§9.2: rappid.json names it), never a fresh sibling
             "exported_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "source": {
                 "rappid_uuid": rappid_uuid,
@@ -862,8 +1164,7 @@ def pack_twin_from_repo(repo_path: str,
 
         z.writestr("manifest.json", json.dumps(manifest, indent=2))
 
-    blob = buf.getvalue()
-    return blob
+    return _finalize_egg(z, "organism")
 
 
 def summon_twin_egg(blob: bytes, host_root: str,
