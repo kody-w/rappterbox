@@ -375,12 +375,9 @@ def _finalize_egg(z,variant):
         if "agent.py" not in files: variant="organism"
     if variant=="organism": files.setdefault("soul.md",b"# soul\n")
     if not _canon_match(rid):
-        # A legacy or missing identity cannot travel in a rapp/1-egg (§6.1): derive the stand-in BEFORE
-        # rappid.json names the egg's identity, so the two agree (§9.2).
-        import hashlib as _h
-        content=b"".join(files[k] for k in sorted(files))
-        slug=_canon_label(str(meta.get("name") or meta.get("slug") or "thing"),"thing")
-        rid=f"rappid:@kody-w/{slug}:"+_egg_hb("rapp/1:rappid",_h.sha256(content).digest())
+        # A legacy or missing identity cannot travel in a rapp/1-egg (§6.1): mint a §6.2 keyless stand-in
+        # BEFORE rappid.json names the egg's identity, so the two agree (§9.2).
+        rid=_make_rappid(variant,"@kody-w",_canon_label(str(meta.get("name") or meta.get("slug") or "thing"),"thing"))
     if "rappid.json" not in files:
         files["rappid.json"]=(_j.dumps({"schema":"rapp/1","rappid":rid,"parent_rappid":meta.get("parent_rappid"),"kind":variant},indent=2)+"\n").encode()
     payload={k:v for k,v in meta.items() if k not in ("schema","type","rappid","exported_at","created_at","created_utc")}
