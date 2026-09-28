@@ -324,7 +324,9 @@ class SummonTwinAgent(BasicAgent):
         # Canonical §6.1 mint (tail = Hb("rapp/1:rappid", uuid4)); a separate uuid hex
         # is the on-disk workspace key (a dir name is not an identity).
         _dir_key = uuid.uuid4().hex
-        rappid_uuid = f"rappid:@local/{twin_name}:" + hashlib.sha256(b"rapp/1:rappid\n" + uuid.uuid4().bytes).hexdigest()
+        # §6.1: a rappid slug is a label (no "_", no "--"); twin_name may hold both, so derive it.
+        _rappid_slug = re.sub(r"[^a-z0-9]+", "-", twin_name).strip("-") or "twin"
+        rappid_uuid = f"rappid:@local/{_rappid_slug}:" + hashlib.sha256(b"rapp/1:rappid\n" + uuid.uuid4().bytes).hexdigest()
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
         # Decide the workspace path
